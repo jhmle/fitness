@@ -136,7 +136,7 @@ if (llmW) llmW.onmessage = ({ data: d }) => {
   else if (d.type === "warn") { console.warn(d.message); $("diag").textContent = d.message; }
   else if (d.type === "ready") {
     llmOK = d.llm; embOK = d.emb; llmModel = d.model; $("pl").value = 100;
-    $("modelNote").textContent = d.llm ? "Coach brain: " + d.model + (d.model !== $("llmModel").value ? " (fallback: the selected model failed to load)" : "") : "Coach brain: none loaded, rules only";
+    $("modelNote").textContent = d.llm ? "Coach brain: " + d.model + (d.model !== $("llmModel").value ? " (fallback: the selected model failed to load)" : "") : "Coach brain: NOT loaded, rules only. " + (d.why || "");
     llmDone();
   }
   else if (d.type === "result") { pend.get(d.id)?.(d); pend.delete(d.id); }
@@ -163,8 +163,8 @@ async function chatAnswer(q) {
 }
 // Only workout controls go to the rule-based agent; everything else is a free-form question for the LLM.
 const CMD = /\b(start|begin|switch to|change to|stop|pause|resume|rest|break|reps?|sets?|easier|harder|longer|shorter|next set|how was|how did|how many|count)\b/i;
-function utter(t) { lastHeard = t; if (CMD.test(t)) return agent.onVoice(t); chatAnswer(t); return true; }
-const route = (text, o) => (lastHeard && /don'?t have a tip/i.test(text) ? chatAnswer(lastHeard) : say(text, o));
+function utter(t) { lastHeard = t; if (CMD.test(t) || !llm?.ready()) return agent.onVoice(t); chatAnswer(t); return true; }
+const route = (text, o) => (lastHeard && llm?.ready() && /don'?t have a tip/i.test(text) ? chatAnswer(lastHeard) : say(text, o));
 
 // ---------------------------------------------------------------- agent
 const agent = new Agent({

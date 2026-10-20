@@ -7,21 +7,21 @@ const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] 
 
 // Try q4 first (what the app ships), then q8/fp16, on WebGPU then WASM, so a model exported with different quantisations still loads.
 async function loadLLM(id) {
-  let last;
+  const errs = [];
   for (const device of self.navigator?.gpu ? ["webgpu", "wasm"] : ["wasm"]) {
-    for (const dtype of ["q4", "q8", "fp16"]) {
+    for (const dtype of ["q4", "q4f16", "q8", "uint8", "fp16"]) {
       try { return await T.pipeline("text-generation", id, { dtype, device, progress_callback: prog(15, 100) }); }
-      catch (x) { last = x; }
+      catch (x) { errs.push(`${device}/${dtype}: ${String(x.message || x).slice(0, 120)}`); }
     }
   }
-  throw last;
+  throw new Error(errs.join(" | "));
 }
 
 self.onmessage = async ({ data }) => {
   try {
     if (data.type === "load") {
       T = await import(TRANSFORMERS_URL);
-      let llm = false, e = false;
+      let llm = false, e = false, why = "";
       try {                                                    // embeddings first (tiny), then index the KB
         emb = await T.pipeline("feature-extraction", EMBED_ID, { dtype: "q8", device: "wasm", progress_callback: prog(0, 15) });
         kb = data.kb; kv = [];
@@ -32,9 +32,9 @@ self.onmessage = async ({ data }) => {
       const want = data.model || LLM_ID;
       for (const id of want === LLM_ID ? [LLM_ID] : [want, LLM_ID]) {   // a missing/broken tuned model falls back to the stock one
         try { gen = await loadLLM(id); llm = true; used = id; break; }
-        catch (x) { post({ type: "warn", message: `LLM ${id}: ${x.message || x}` + (id !== LLM_ID ? " (falling back to " + LLM_ID + ")" : "") }); }
+        catch (x) { why = `LLM ${id}: ${x.message || x}`; post({ type: "warn", message: `LLM ${id}: ${x.message || x}` + (id !== LLM_ID ? " (falling back to " + LLM_ID + ")" : "") }); }
       }
-      post({ type: "ready", llm, emb: e, model: used });
+      post({ type: "ready", llm, emb: e, model: used, why });
     } else if (data.type === "chat") {
       const out = await gen(data.messages, { max_new_tokens: 160, do_sample: false, return_full_text: false });
       const g = out[0].generated_text;
