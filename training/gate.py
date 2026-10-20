@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import re
 import sys
 
@@ -35,6 +36,12 @@ def main() -> int:
     ap.add_argument("--config", default=str(APP_DIR / "config.js"))
     a = ap.parse_args()
 
+    for label, path in (("candidate", a.candidate), ("production", a.production)):
+        if not pathlib.Path(path).exists():
+            hint = ("it is written by the evaluation step: run `python eval.py --predictor hf --model <base> --adapter out/adapter --name candidate` first"
+                    if label == "candidate" else "it is committed in the repo as training/metrics/production.json; run this from the training/ folder")
+            print(f"{label} file not found: {path}\n  -> {hint}")
+            return 2
     cand, prod = load(a.candidate), load(a.production)
     c, p = cand["metrics"], prod["metrics"]
     fails, rows = [], []

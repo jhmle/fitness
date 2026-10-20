@@ -173,9 +173,17 @@ def log_mlflow(a, result, adapter):
             mlflow.log_artifacts(adapter, "adapter")
             if a.register:
                 try:
-                    mv = mlflow.register_model(f"runs:/{run.info.run_id}/adapter", a.register)
+                    # MLflow 3 only lets runs:/ URIs point at "logged models", and a plain artifact folder isn't one.
+                    # Registering from the artifact location works on MLflow 2 and 3 (and needs no flavor).
+                    from mlflow import MlflowClient
+                    client = MlflowClient()
+                    try:
+                        client.create_registered_model(a.register)
+                    except Exception:   # already exists
+                        pass
+                    mv = client.create_model_version(a.register, source=f"{run.info.artifact_uri}/adapter", run_id=run.info.run_id)
                     print(f"registered {a.register} v{mv.version}")
-                except Exception as e:   # registry support varies by backend/version
+                except Exception as e:   # registry support varies by backend/version; metrics are already saved
                     print("model registry step skipped:", e)
         print("MLflow run:", run.info.run_id)
 
