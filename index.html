@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Trainer · Pose + Voice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <a class="back" href="/">Home</a>
+      <h1>AI Trainer</h1>
+      <p>Counts your reps, checks your form and coaches you out loud. Everything runs on your device.</p>
+    </div>
+    <div id="status" class="pill pill-idle" role="status" aria-live="polite">Models not loaded</div>
+  </header>
+
+  <section class="card" id="setup">
+    <div class="card-head">
+      <h2>Get started</h2>
+      <span class="muted small hint">Downloads once, then cached (about 250 MB)</span>
+      <span class="doneMsg">✓ Models loaded</span>
+    </div>
+    <div class="load-grid">
+      <label class="meter"><span>Pose + voice detection</span><progress id="pp" max="100" value="0"></progress></label>
+      <label class="meter"><span>Moonshine (hears you)</span><progress id="pm" max="100" value="0"></progress></label>
+      <label class="meter" id="kLabel"><span>Kokoro (speaks)</span><progress id="pk" max="100" value="0"></progress></label>
+      <button id="load" class="btn btn-primary">Load models</button>
+    </div>
+  </section>
+
+  <section class="stage" id="stage" data-state="off" aria-label="Workout">
+    <video id="cam" muted playsinline></video>
+    <canvas id="ov"></canvas>
+    <div class="tint"></div>
+    <div class="hud"><div><small>Reps</small><span id="repN">0</span></div><div><small>Set</small><span id="setN">1</span></div></div>
+    <div class="center">
+      <div class="turn" id="turn"><span class="turn-dot"></span><span id="turnText">Not started</span></div>
+      <div class="orb" id="orb" aria-hidden="true"><i></i><i></i><i></i><b></b></div>
+      <h2 id="title">Ready when you are</h2>
+      <p id="hint">Load the models, then start a session.</p>
+      <div id="out" class="out" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <div class="controls">
+    <button id="mic" class="btn btn-go" disabled><span class="ico"></span><span id="micLabel">Start session</span></button>
+    <button id="skip" class="btn" disabled>Skip cue</button>
+  </div>
+
+  <div class="options">
+    <label class="inline"><span>Exercise</span>
+      <select id="ex"><option value="squat">Squat</option><option value="pushup">Push-up</option><option value="curl">Curl</option></select></label>
+    <label class="switch"><input type="checkbox" id="speakOn" checked><span class="slider"></span><span>Speak cues</span></label>
+    <label class="switch"><input type="checkbox" id="voiceOn" checked><span class="slider"></span><span>Voice commands</span></label>
+    <label class="inline"><span>Voice</span><select id="voice"></select></label>
+  </div>
+
+  <details class="card tools">
+    <summary>Type a command instead</summary>
+    <p class="muted small">Try: "start push-ups", "how was that set", "why do my knees hurt", "rest".</p>
+    <label class="field"><span>Command</span><textarea id="prompt" rows="2" placeholder="Type what you would say"></textarea></label>
+    <div class="row"><button id="txt" class="btn">Send</button></div>
+    <div class="small muted diag-label">Last rep</div>
+    <pre id="dbg"></pre>
+  </details>
+  <p class="muted small">Coaching cues are general guidance, not medical advice. Stop if something hurts.</p>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
