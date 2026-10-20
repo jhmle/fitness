@@ -82,9 +82,9 @@ moon.onmessage = async ({ data: d }) => {
 };
 
 // ---------------------------------------------------------------- speech out (Kokoro on desktop, browser voice on mobile)
-let actx, nextT = 0, sources = [];
+let actx, nextT = 0, sources = [], lastSay = "";
 function play(samples, rate) {
-  actx ??= new AudioContext();
+  actx ??= new AudioContext(); if (actx.state === "suspended") actx.resume();
   const b = actx.createBuffer(1, samples.length, rate); b.copyToChannel(samples, 0);
   const s = actx.createBufferSource(); s.buffer = b; s.connect(actx.destination);
   nextT = Math.max(nextT, actx.currentTime + 0.05); s.start(nextT); nextT += b.duration;
@@ -105,7 +105,7 @@ function say(text, { urgent = false } = {}) {
   if (!S || !$("speakOn").checked) return;
   if (busyTTS && !urgent) return;                  // don't talk over ourselves: drop routine cues
   if (urgent) stopSpeech();
-  busyTTS++; setState("speaking");
+  lastSay = text; busyTTS++; setState("speaking");
   { const e = epoch; setTimeout(() => { if (e === epoch && busyTTS && S) { busyTTS = 0; setState("listening"); } }, 20000); }   // never stay deaf if audio fails to finish
   if (kokoro) kokoro.postMessage({ type: "speak", text, voice: $("voice").value, id: epoch });
   else { const e = epoch, u = new SpeechSynthesisUtterance(text); u.onend = u.onerror = () => e === epoch && done(); speechSynthesis.speak(u); }
@@ -118,7 +118,12 @@ kokoro && (kokoro.onmessage = ({ data: d }) => {
     onReady();
   }
   else if (d.type === "audio") { if (d.id === epoch) play(d.samples, d.rate); }
-  else if (d.type === "error") { if (d.id === epoch) done(); fail(d, "Kokoro"); }
+  else if (d.type === "error") {
+    if (d.id === epoch) {                                       // Kokoro failed: fall back to the browser voice so the reply is still spoken
+      if (lastSay) { const e = epoch, u = new SpeechSynthesisUtterance(lastSay); u.onend = u.onerror = () => e === epoch && done(); speechSynthesis.speak(u); } else done();
+    }
+    fail(d, "Kokoro");
+  }
 });
 $("skip").onclick = () => { stopSpeech(); if (S) setState("listening"); };
 
@@ -128,7 +133,7 @@ const llmDone = () => { if (!llmCounted) { llmCounted = true; onReady(); } };
 const call = (msg) => new Promise((res) => { const id = ++rid; pend.set(id, res); llmW.postMessage({ ...msg, id }); });
 const llm = llmW && {
   ready: () => llmOK,
-  chat: async (messages) => (await call({ type: "chat", messages })).text,
+  chat: async (messages, max) => (await call({ type: "chat", messages, max })).text,
   search: async (query, ex, k) => (embOK ? (await call({ type: "search", query, ex, k })).ids : []),
 };
 if (llmW) llmW.onmessage = ({ data: d }) => {
@@ -145,26 +150,29 @@ if (llmW) llmW.onmessage = ({ data: d }) => {
 
 // ---------------------------------------------------------------- general chat fallback
 // The agent only knows workout commands + a small tips knowledge base. When it has no tip, ask the LLM instead.
-let lastHeard = "", chatBusy = false;
+let lastHeard = "", lastHeardAt = 0, chatBusy = false;
 const chatHist = [];
-const CHAT_SYS = "You are a friendly voice assistant and fitness coach. Answer the user's question directly in one to three short spoken sentences. " +
+const CHAT_SYS = "You are a friendly voice assistant and fitness coach. Answer in ONE short spoken sentence, 20 words at most. Never more than two sentences. " +
   "Plain words only: no markdown, lists, emojis or stage directions. If you are not sure, say so briefly.";
 async function chatAnswer(q) {
   if (!llm || !llm.ready()) { say("My language model didn't load, so I can only handle workout commands."); return; }
   chatBusy = true; setState("thinking");
   try {
-    let t = ((await llm.chat([{ role: "system", content: CHAT_SYS }, ...chatHist.slice(-6), { role: "user", content: q }])) || "").trim();
-    if (t && !/[.!?]$/.test(t)) { const i = Math.max(t.lastIndexOf("."), t.lastIndexOf("!"), t.lastIndexOf("?")); if (i > 20) t = t.slice(0, i + 1); }   // don't end mid-sentence
+    let t = ((await llm.chat([{ role: "system", content: CHAT_SYS }, ...chatHist.slice(-6), { role: "user", content: q }], 60)) || "").replace(/[*_#`>~]+/g, "").replace(/\s+/g, " ").trim();
+    const sents = t.match(/[^.!?]+[.!?]+/g);                     // keep at most two whole sentences, max ~35 words
+    if (sents) t = sents.slice(0, 2).join(" ").trim();
+    else if (t) t += ".";
+    const w = t.split(" "); if (w.length > 35) t = w.slice(0, 35).join(" ").replace(/[,;:]$/, "") + ".";
     if (!t) t = "Sorry, I couldn't come up with an answer to that.";
     chatHist.push({ role: "user", content: q }, { role: "assistant", content: t });
-    chatBusy = false; say(t);
+    chatBusy = false; say(t, { urgent: true });
   } catch (e) { chatBusy = false; say("Sorry, something went wrong answering that."); }
   if (!busyTTS && S) setState("listening");
 }
 // Only workout controls go to the rule-based agent; everything else is a free-form question for the LLM.
 const CMD = /\b(start|begin|switch to|change to|stop|pause|resume|rest|break|reps?|sets?|easier|harder|longer|shorter|next set|how was|how did|how many|count)\b/i;
-function utter(t) { lastHeard = t; if (CMD.test(t) || !llm?.ready()) return agent.onVoice(t); chatAnswer(t); return true; }
-const route = (text, o) => (lastHeard && llm?.ready() && /don'?t have a tip/i.test(text) ? chatAnswer(lastHeard) : say(text, o));
+function utter(t) { lastHeard = t; lastHeardAt = performance.now(); if (CMD.test(t) || !llm?.ready()) return agent.onVoice(t); chatAnswer(t); return true; }
+const route = (text, o) => (lastHeard && llm?.ready() && /don'?t have a tip/i.test(text) ? chatAnswer(lastHeard) : say(text, performance.now() - lastHeardAt < 20000 ? { ...o, urgent: true } : o));   // replies to what you said are never dropped
 
 // ---------------------------------------------------------------- agent
 const agent = new Agent({
@@ -230,6 +238,7 @@ async function openMic() {
 async function begin() {
   if (S || starting || ready < need) return;
   starting = true; refresh(); stopSpeech();
+  actx ??= new AudioContext(); actx.resume().catch(() => {});   // unlock audio output inside the click so replies can always play
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false }); }
   catch (e) { starting = false; refresh(); return setStatus("Camera access failed: " + e.message, "error"); }
