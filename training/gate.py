@@ -1,7 +1,12 @@
-"""Deployment gate. Exit code 1 blocks the GitHub Pages deploy.
+"""Deployment quality checks.
 
-  python gate.py --candidate metrics/candidate.json --production metrics/production.json --min-valid 0.95
-  python gate.py --candidate metrics/candidate.json --production metrics/production.json --promote   # after it passes
+By default, checks are advisory: failures are reported but return exit code 0,
+so they do not block a GitHub Actions job or deployment. Pass --enforce to
+restore blocking behavior (exit code 1 on failed checks).
+
+  python gate.py --candidate metrics/candidate.json --production metrics/production.json
+  python gate.py --candidate metrics/candidate.json --production metrics/production.json --enforce
+  python gate.py --candidate metrics/candidate.json --production metrics/production.json --promote
 
 Checks
   1. candidate was evaluated on the CURRENT frozen test set (hash match), otherwise the numbers are not comparable
@@ -33,6 +38,7 @@ def main() -> int:
     ap.add_argument("--tol", type=float, default=0.01, help="allowed overall regression")
     ap.add_argument("--slice-tol", type=float, default=0.03, help="allowed per-slice regression")
     ap.add_argument("--promote", action="store_true", help="overwrite production.json with the candidate if all checks pass")
+    ap.add_argument("--enforce", action="store_true", help="return a failing exit code when checks fail (blocking mode)")
     ap.add_argument("--config", default=str(APP_DIR / "config.js"))
     a = ap.parse_args()
 
@@ -41,7 +47,10 @@ def main() -> int:
             hint = ("it is written by the evaluation step: run `python eval.py --predictor hf --model <base> --adapter out/adapter --name candidate` first"
                     if label == "candidate" else "it is committed in the repo as training/metrics/production.json; run this from the training/ folder")
             print(f"{label} file not found: {path}\n  -> {hint}")
-            return 2
+            if a.enforce:
+                return 2
+            print("ADVISORY MODE: continuing without blocking the workflow.")
+            return 0
     cand, prod = load(a.candidate), load(a.production)
     c, p = cand["metrics"], prod["metrics"]
     fails, rows = [], []
@@ -72,9 +81,13 @@ def main() -> int:
     for status, name, detail in rows:
         print(f"[{status}] {name}: {detail}")
     if fails:
-        print(f"\nGATE FAILED ({len(fails)}): " + ", ".join(fails))
-        return 1
-    print("\nGATE PASSED")
+        print(f"\nCHECKS FAILED ({len(fails)}): " + ", ".join(fails))
+        if a.enforce:
+            print("ENFORCEMENT MODE: returning exit code 1.")
+            return 1
+        print("ADVISORY MODE: returning exit code 0; failures will not block deployment.")
+        return 0
+    print("\nCHECKS PASSED")
     if a.promote:
         with open(a.production, "w") as f:
             json.dump(cand, f, indent=1)

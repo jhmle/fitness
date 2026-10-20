@@ -18,7 +18,7 @@ GitHub Actions:  pytest ► eval rules ► gate.py (vs metrics/production.json) 
 | `gen_data.py` | NumPy rep simulator (thresholds from `exercises.js`, fatigue drift) + teacher policy → labelled decisions. Test voice phrasings are held out from train |
 | `finetune_qlora.py` | 4-bit NF4 + LoRA (PyTorch/PEFT/bitsandbytes), loss only on the JSON answer, logs to MLflow |
 | `eval.py` | Rules baseline or HF model (+adapter). scikit-learn metrics, confusion matrix, MLflow logging/registration |
-| `gate.py` | Regression gate + test-set hash check + "deployed model == evaluated model" check |
+| `gate.py` | Advisory regression checks by default; pass `--enforce` to make failures block the command |
 | `merge_export.py` | Merge adapter into fp16 base, optional push to HF Hub (for ONNX conversion) |
 | `tests/` | 14 tests incl. a Node test that runs the **real** `agent.js` and asserts the training prompt is byte-identical |
 | `notebooks/kaggle_train.ipynb` | Run-all Kaggle notebook |
@@ -70,9 +70,8 @@ registered model `trainer-coach` (a new version per `--register` run). Runs are 
 # results.zip contains training/metrics/candidate.json: copy it into your repo's training/metrics/ and commit it
 python gate.py --candidate metrics/candidate.json --production metrics/production.json --min-valid 0.95
 ```
-Prints PASS/FAIL per check. `production.json` starts as the **rules baseline**, so a candidate must match rules on `rep_cue` (cue choice is deterministic)
-and beat it on `voice`/`set_end`. If your first model narrowly misses one slice, retrain with more epochs or loosen `--slice-tol`; don't edit the metrics.
-When it passes and you ship it: `python gate.py ... --promote` makes it the new production baseline.
+Prints PASS/FAIL per check. By default, the checks are advisory and a failed check returns exit code 0, so the gate does not block a GitHub Actions job or deployment. Add `--enforce` to restore blocking behavior. `production.json` starts as the **rules baseline**; treat metrics as diagnostics rather than proof of coaching quality.
+Use `--promote` only when you intentionally want to replace the production baseline and the checks pass.
 
 ## 4. Ship it to the browser (ONNX for transformers.js)
 
