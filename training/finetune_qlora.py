@@ -19,6 +19,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("MLFLOW_TRACKING_URI", f"sqlite:///{pathlib.Path(__file__).resolve().parent.parent / 'mlflow.db'}")
 
 import argparse  # noqa: E402
+import inspect  # noqa: E402
 import json  # noqa: E402
 import random  # noqa: E402
 
@@ -101,10 +102,12 @@ def main():
 
     train_ds = DecisionDataset(load_rows(a.train), tok, a.max_len)
     val_ds = DecisionDataset(load_rows(a.val), tok, a.max_len)
+    # transformers v5 removed warmup_ratio (warmup_steps < 1 is now read as a ratio); older versions only have warmup_ratio
+    warmup = {"warmup_ratio": 0.05} if "warmup_ratio" in inspect.signature(TrainingArguments.__init__).parameters else {"warmup_steps": 0.05}
     args = TrainingArguments(
         output_dir=os.path.join(a.out, "checkpoints"), num_train_epochs=a.epochs, learning_rate=a.lr,
         per_device_train_batch_size=a.batch_size, per_device_eval_batch_size=a.batch_size, gradient_accumulation_steps=a.grad_accum,
-        lr_scheduler_type="cosine", warmup_ratio=0.05, weight_decay=0.0, fp16=True, optim="paged_adamw_8bit",
+        lr_scheduler_type="cosine", **warmup, weight_decay=0.0, fp16=True, optim="paged_adamw_8bit",
         gradient_checkpointing=True, logging_steps=10, eval_strategy="epoch", save_strategy="no",
         report_to=[] if a.no_mlflow else ["mlflow"], remove_unused_columns=False, seed=a.seed)
     trainer = Trainer(model=model, args=args, train_dataset=train_ds, eval_dataset=val_ds, data_collator=make_collator(tok.pad_token_id))
