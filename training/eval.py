@@ -63,7 +63,10 @@ def make_hf_runner(model_id: str, adapter: str | None, batch_size: int):
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
     dev = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16 if dev == "cuda" else torch.float32).to(dev)
+    import transformers   # `torch_dtype` was renamed to `dtype` in transformers 4.56; pick whichever this install understands
+    ver = tuple(int(x) for x in transformers.__version__.split(".")[:2] if x.isdigit())
+    dtype_kw = {("dtype" if ver >= (4, 56) else "torch_dtype"): torch.float16 if dev == "cuda" else torch.float32}
+    model = AutoModelForCausalLM.from_pretrained(model_id, **dtype_kw).to(dev)
     if adapter:
         from peft import PeftModel
         model = PeftModel.from_pretrained(model, adapter).merge_and_unload()

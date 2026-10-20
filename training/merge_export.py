@@ -22,7 +22,9 @@ a = ap.parse_args()
 
 base = json.load(open(os.path.join(a.adapter, "train_info.json")))["base"]
 print("base:", base)
-model = AutoModelForCausalLM.from_pretrained(base, torch_dtype=torch.float16)
+import transformers   # `torch_dtype` was renamed to `dtype` in transformers 4.56
+ver = tuple(int(x) for x in transformers.__version__.split(".")[:2] if x.isdigit())
+model = AutoModelForCausalLM.from_pretrained(base, **{("dtype" if ver >= (4, 56) else "torch_dtype"): torch.float16})
 model = PeftModel.from_pretrained(model, a.adapter).merge_and_unload()
 tok = AutoTokenizer.from_pretrained(a.adapter)
 model.save_pretrained(a.out, safe_serialization=True)
