@@ -15,6 +15,22 @@ const NAMES = ["squat", "pushup", "curl"];
 const PAIN = /pain|sharp|dizzy|lightheaded|faint|can't breathe/i;
 export const kbDocs = () => Object.entries(KB).map(([id, e]) => ({ id, ex: e.ex, text: `${id.replace(/_/g, " ")}. ${e.cue} ${e.alt} ${e.why}` }));
 const avg = (a) => a.reduce((x, y) => x + y, 0) / (a.length || 1);
+const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15 };
+const WORDS = Object.keys(NUM).join("|");
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+export function parseSeconds(t) {                 // "30 seconds", "two minutes", "half a minute", "ninety seconds" -> seconds | null
+  let m;
+  if (/three quarters of a minute/.test(t)) return 45;
+  if (/quarter of a minute/.test(t)) return 15;
+  if ((m = t.match(/(\d+)\s*(?:seconds?|secs?)\b/))) return +m[1];
+  if (/a minute and a half/.test(t)) return 90;
+  if (/half a minute/.test(t)) return 30;
+  if ((m = t.match(new RegExp(`\\b(\\d+|${WORDS})\\s*(?:minutes?|mins?)\\b`)))) return 60 * (NUM[m[1]] ?? +m[1]);
+  if (/\b(?:a|one) minute\b/.test(t)) return 60;
+  if ((m = t.match(/\b(fifteen|thirty|forty[ -]five|sixty|ninety)\s*(?:seconds?|secs?)\b/))) return { fifteen: 15, thirty: 30, "forty five": 45, sixty: 60, ninety: 90 }[m[1].replace("-", " ")];
+  return null;
+}
+const repsIn = (t) => { const m = t.match(new RegExp(`\\b(\\d{1,2}|${WORDS})\\s+reps?\\b`)); return m ? (NUM[m[1]] ?? +m[1]) : null; };
 const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms));
 
 export function retrieve(query, ex, k = 1) {      // keyword fallback if the embedder isn't available
@@ -40,14 +56,19 @@ Tools:
 {"tool":"rest_timer","args":{"seconds":<10-300>}}
 {"tool":"start_exercise","args":{"name":"squat|pushup|curl"}}
 {"tool":"set_summary","args":{}}
-Rules: only cue an error listed in STATE. Use KNOWLEDGE to word the cue. If last_cue.fixed is false, word it differently. At set end, if trend.depth_loss_deg > 12 or errors are frequent, call adjust_plan with a lower target and longer rest. For VOICE events pick the tool that matches what the athlete said.
+Rules: only cue an error listed in STATE. Use KNOWLEDGE to word the cue. If last_cue.fixed is false, word it differently. At set end, if trend.depth_loss_deg > 12 or STATE has 2 or more errors, call adjust_plan with rest+30 (max 300) and target-2 (min 3); otherwise call adjust_plan with the current rest and target unchanged. For VOICE events pick the tool that matches what the athlete said: start or switch exercise -> start_exercise; summary or done -> set_summary; a question or request for tips -> retrieve_cues; rest or break -> rest_timer with the seconds said, else the current rest; plan changes -> adjust_plan computed from STATE rest and target: easier = rest+30 and target-2; fewer reps = target-2; more reps = target+2 (max 20); longer rest = rest+30; shorter rest = rest-15 (min 10); "N reps" = target N; "set the rest to X" = rest X.
 Examples:
 EVENT REP STATE {"errors":[{"id":"squat_lean"}],"last_cue":null}
 {"tool":"give_cue","args":{"cue_id":"squat_lean","text":"Chest up and brace your core."}}
 EVENT VOICE SAID "why do my knees hurt"
 {"tool":"retrieve_cues","args":{"query":"why do my knees hurt"}}
 EVENT VOICE SAID "switch to push ups"
-{"tool":"start_exercise","args":{"name":"pushup"}}`;
+{"tool":"start_exercise","args":{"name":"pushup"}}
+EVENT VOICE SAID "fewer reps please"
+STATE {"rest":60,"target":8,"errors":[]}
+{"tool":"adjust_plan","args":{"rest":60,"target":6}}
+EVENT REP STATE {"rep":8,"target":8,"rest":60,"errors":[{"id":"squat_lean"},{"id":"too_fast"}],"trend":{"depth_loss_deg":4}}
+{"tool":"adjust_plan","args":{"rest":90,"target":6}}`;
 
 function validate(c, allow, errors) {              // never trust model output: whitelist tool + check every arg
   if (!c || typeof c.tool !== "string" || !allow.includes(c.tool)) return null;
@@ -175,13 +196,24 @@ export class Agent {
     let c = await this.ask("VOICE", st, ["retrieve_cues", "adjust_plan", "rest_timer", "start_exercise", "set_summary"], text);
     this.src = c ? "llm" : "rule";
     c ??= this.regexIntent(text);
-    this.exec(c); return !!c;
+    this.exec(c);
+    if (c && c.tool === "adjust_plan") Promise.resolve().then(() => { this.adjNote = ""; this.h.say(`Okay. ${this.target} reps, ${this.rest} seconds rest.`, { urgent: true }); });
+    else if (c && c.tool === "rest_timer") Promise.resolve().then(() => this.h.say(`Resting ${Math.round(c.args.seconds)} seconds.`, { urgent: true }));
+    return !!c;
   }
-  regexIntent(text) {                               // fallback when the LLM is off, late or invalid
-    const t = text.toLowerCase();
-    if (/start|begin|switch|let's do/.test(t) && /squat|push|curl/.test(t)) return { tool: "start_exercise", args: { name: /squat/.test(t) ? "squat" : /push/.test(t) ? "pushup" : "curl" } };
+  regexIntent(text) {                               // fallback when the LLM is off, late or invalid. Mirrored by training/eval.py predict_rules (a test keeps them identical)
+    const t = text.toLowerCase(), secs = parseSeconds(t), n = repsIn(t);
+    const plan = (rest, target) => ({ tool: "adjust_plan", args: { rest: clamp(rest, 10, 300), target: clamp(target, 3, 20) } });
+    if (/start|begin|switch|let's do|change|want to do/.test(t) && /squat|push|curl/.test(t)) return { tool: "start_exercise", args: { name: /squat/.test(t) ? "squat" : /push/.test(t) ? "pushup" : "curl" } };
+    if (/\b(set|change|make|update)\b.*\brest\b/.test(t) && secs) return plan(secs, this.target);          // "set my rest time to 90 seconds"
+    if (/\b(easier|too hard|too difficult)\b/.test(t)) return plan(this.rest + 30, this.target - 2);
+    if (/\b(fewer|reduce|decrease|less|lower)\b.*\breps?\b/.test(t)) return plan(this.rest, this.target - 2);
+    if (/\b(more|increase|add|extra)\b.*\breps?\b/.test(t)) return plan(this.rest, this.target + 2);
+    if (/\b(longer|more|extra|increase|lengthen)\b.*\brest\b/.test(t)) return plan(this.rest + 30, this.target);
+    if (/\b(shorter|less|reduce|decrease|lower)\b.*\brest\b/.test(t)) return plan(this.rest - 15, this.target);
+    if (n) return plan(this.rest, n);                                                                        // "do 10 reps per set"
     if (/how (was|did)|summary|finish|done|end (the )?set/.test(t)) return { tool: "set_summary" };
-    if (/rest|break/.test(t)) return { tool: "rest_timer", args: { seconds: this.rest } };
+    if (/rest|break/.test(t)) return { tool: "rest_timer", args: { seconds: clamp(secs ?? this.rest, 10, 300) } };
     if (/\b(why|how|what|should|tips?|help)\b/.test(t)) return { tool: "retrieve_cues", args: { query: text } };
     return null;
   }

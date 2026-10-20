@@ -31,8 +31,10 @@
       <label class="meter"><span>Moonshine (hears you)</span><progress id="pm" max="100" value="0"></progress></label>
       <label class="meter" id="kLabel"><span>Kokoro (speaks)</span><progress id="pk" max="100" value="0"></progress></label>
       <label class="meter" id="lLabel"><span>Coach brain (LLM + search)</span><progress id="pl" max="100" value="0"></progress></label>
+      <label class="meter" id="mLabel"><span>Coach model</span><select id="llmModel"></select></label>
       <button id="load" class="btn btn-primary">Load models</button>
     </div>
+    <p id="modelNote" class="small muted" style="margin:12px 0 0"></p>
   </section>
 
   <section class="stage" id="stage" data-state="off" aria-label="Workout">
@@ -65,7 +67,7 @@
 
   <details class="card tools">
     <summary>Type a command instead</summary>
-    <p class="muted small">Try: "start push-ups", "how was that set", "why do my knees hurt", "rest".</p>
+    <p class="muted small">Try: "start push-ups", "how was that set", "why do my knees hurt", "rest for 30 seconds", "make it easier", "do 10 reps", "longer rest".</p>
     <label class="field"><span>Command</span><textarea id="prompt" rows="2" placeholder="Type what you would say"></textarea></label>
     <div class="row"><button id="txt" class="btn">Send</button></div>
     <div class="row"><button id="dl" class="btn">Download session log</button></div>

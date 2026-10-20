@@ -5,6 +5,18 @@ const post = (m) => self.postMessage(m);
 const prog = (lo, hi) => (p) => p.status === "progress_total" && post({ type: "progress", pct: lo + (hi - lo) * p.progress / 100 });
 const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
 
+// Try q4 first (what the app ships), then q8/fp16, on WebGPU then WASM, so a model exported with different quantisations still loads.
+async function loadLLM(id) {
+  let last;
+  for (const device of self.navigator?.gpu ? ["webgpu", "wasm"] : ["wasm"]) {
+    for (const dtype of ["q4", "q8", "fp16"]) {
+      try { return await T.pipeline("text-generation", id, { dtype, device, progress_callback: prog(15, 100) }); }
+      catch (x) { last = x; }
+    }
+  }
+  throw last;
+}
+
 self.onmessage = async ({ data }) => {
   try {
     if (data.type === "load") {
@@ -16,11 +28,13 @@ self.onmessage = async ({ data }) => {
         for (const d of kb) kv.push((await emb(d.text, { pooling: "mean", normalize: true })).data);
         e = true;
       } catch (x) { post({ type: "warn", message: "Embeddings: " + (x.message || x) }); }
-      try {
-        gen = await T.pipeline("text-generation", LLM_ID, { dtype: "q4", device: self.navigator?.gpu ? "webgpu" : "wasm", progress_callback: prog(15, 100) });
-        llm = true;
-      } catch (x) { post({ type: "warn", message: "LLM: " + (x.message || x) }); }
-      post({ type: "ready", llm, emb: e });
+      let used = null;
+      const want = data.model || LLM_ID;
+      for (const id of want === LLM_ID ? [LLM_ID] : [want, LLM_ID]) {   // a missing/broken tuned model falls back to the stock one
+        try { gen = await loadLLM(id); llm = true; used = id; break; }
+        catch (x) { post({ type: "warn", message: `LLM ${id}: ${x.message || x}` + (id !== LLM_ID ? " (falling back to " + LLM_ID + ")" : "") }); }
+      }
+      post({ type: "ready", llm, emb: e, model: used });
     } else if (data.type === "chat") {
       const out = await gen(data.messages, { max_new_tokens: 70, do_sample: false, return_full_text: false });
       const g = out[0].generated_text;
