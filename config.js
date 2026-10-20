@@ -8,7 +8,7 @@ export const ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist
 export const MOONSHINE_ID = "onnx-community/moonshine-tiny-ONNX";
 export const LLM_ID = "HuggingFaceTB/SmolLM2-360M-Instruct";   // PRODUCTION coach brain. training/gate.py checks this exact line against metrics/production.json
 export const TUNED_ID = "jhmle/trainer-coach-smollm2-360m-onnx";   // fine-tuned candidate (ONNX export of the merged QLoRA model on Hugging Face; the repo must be public)
-export const LLM_CHOICES = [{ id: LLM_ID, label: "Stock SmolLM2-360M" }, { id: TUNED_ID, label: "Fine-tuned (jhmle)" }, { id: "onnx-community/Qwen2.5-1.5B-Instruct", label: "Qwen2.5 1.5B (smarter, about 1.8 GB)" }];
+export const LLM_CHOICES = [{ id: LLM_ID, label: "Stock SmolLM2-360M" }, { id: TUNED_ID, label: "Fine-tuned (jhmle)" }];
 const okId = (v) => typeof v === "string" && /^[\w.-]+\/[\w.-]+$/.test(v);
 // Which model to load: ?llm=owner/repo in the URL, else the saved dropdown choice, else the production default.
 export function chosenLLM() {
