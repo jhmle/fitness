@@ -121,7 +121,7 @@ textarea { width: 100%; resize: vertical; }
 .field { display: grid; gap: 6px; margin: 12px 0 8px; font-weight: 600; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .diag-label { margin-top: 16px; }
-pre#dbg { margin: 6px 0 0; padding: 12px; background: #f3f5fa; border: 1px solid var(--line); border-radius: 10px; font: 12px/1.5 ui-monospace, Menlo, monospace; color: #475467; white-space: pre-wrap; min-height: 20px; }
+pre#diag { margin: 6px 0 0; padding: 12px; background: #f3f5fa; border: 1px solid var(--line); border-radius: 10px; font: 12px/1.5 ui-monospace, Menlo, monospace; color: #475467; white-space: pre-wrap; min-height: 20px; }
 
 @media (prefers-reduced-motion: reduce) { .stage *, .stage { animation: none !important; transition: none !important; } }
 

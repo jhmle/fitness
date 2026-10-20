@@ -40,7 +40,7 @@ const hud = () => { $("repN").textContent = agent.reps.length; $("setN").textCon
 // ---------------------------------------------------------------- loading
 const fail = (e, who = "") => {                      // always say which component failed
   const msg = String(e.message || e); console.error(who, e);
-  $("dbg").textContent = who + ": " + msg;
+  $("diag").textContent = who + ": " + msg;
   setStatus(`Error${who ? " (" + who + ")" : ""}: ` + msg.slice(0, 180), "error");
 };
 const onReady = () => { if (++ready < need) return; $("setup").classList.add("done"); setState("off"); };
@@ -52,7 +52,7 @@ $("load").onclick = async () => {
   moon.postMessage({ type: "load" });
   if (kokoro) kokoro.postMessage({ type: "load" });
   try {
-    const info = await loadPose(); $("pp").value = 60; $("dbg").textContent = "pose: " + info;
+    const info = await loadPose(); $("pp").value = 60; $("diag").textContent = "pose: " + info;
     try { await loadScript(ORT_URL + "ort.wasm.min.js"); await loadScript(VAD_URL + "bundle.min.js"); }
     catch (e) { return fail(e, "Voice detection"); }
     $("pp").value = 100; onReady();
@@ -62,9 +62,9 @@ moon.onmessage = ({ data: d }) => {
   if (d.type === "progress") $("pm").value = d.pct;
   else if (d.type === "ready") { $("pm").value = 100; onReady(); }
   else if (d.type === "text") {
-    $("dbg").textContent = "heard: " + d.text;
+    $("diag").textContent = "heard: " + d.text;
     const handled = d.text && agent.onVoice(d.text);
-    if (d.text && !handled) $("out").textContent = "Heard: " + d.text;
+    if (d.text && !handled) $("cueOut").textContent = "Heard: " + d.text;
     hud(); if (!busyTTS && S) setState("listening");
   }
   else if (d.type === "error") { fail(d, "Moonshine"); if (S) setState("listening"); }
@@ -90,7 +90,7 @@ function done() {
   if (!busyTTS && S) setTimeout(() => { if (!busyTTS && S) setState("listening"); }, 300);   // gap so the mic doesn't catch our own tail
 }
 function say(text, { urgent = false } = {}) {
-  $("out").textContent = text;
+  $("cueOut").textContent = text;
   if (!S || !$("speakOn").checked) return;
   if (busyTTS && !urgent) return;                  // don't talk over ourselves: drop routine cues
   if (urgent) stopSpeech();
@@ -149,7 +149,7 @@ function loop() {
   if (res.event) {
     const ev = res.event;
     if (ev.errors.length) S.flash = { j: new Set(ev.joints), until: performance.now() + 1500 };
-    $("dbg").textContent = JSON.stringify(ev);
+    $("diag").textContent = JSON.stringify(ev);
     agent.onRep(ev); hud();
   }
 }

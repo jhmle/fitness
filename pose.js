@@ -20,7 +20,7 @@ export async function loadPose() {
   for (const v of MEDIAPIPE_VERSIONS) {
     const base = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${v}`;
     let mod, fs;
-    try { mod = await import(base); fs = await mod.FilesetResolver.forVisionTasks(base + "/wasm"); }
+    try { mod = await import(base + "/vision_bundle.mjs"); fs = await mod.FilesetResolver.forVisionTasks(base + "/wasm"); }
     catch (e) { errs.push(`${v} load: ${e.message || e}`); continue; }
     for (const delegate of ["GPU", "CPU"]) {
       try {
