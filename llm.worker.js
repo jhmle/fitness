@@ -17,7 +17,7 @@ async function loadLLM(id) {
   throw new Error(errs.join(" | "));
 }
 
-self.onmessage = async ({ data }) => {
+const handle = async ({ data }) => {
   try {
     if (data.type === "load") {
       T = await import(TRANSFORMERS_URL);
@@ -47,3 +47,6 @@ self.onmessage = async ({ data }) => {
     }
   } catch (e) { post({ type: data.id ? "result" : "error", id: data.id, error: true, message: String(e.message || e) }); }
 };
+// One job at a time: the ONNX session throws if two generations (e.g. a rep cue and a chat answer) overlap.
+let queue = Promise.resolve();
+self.onmessage = (ev) => { queue = queue.then(() => handle(ev)); };

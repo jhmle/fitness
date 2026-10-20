@@ -134,6 +134,7 @@ const call = (msg) => new Promise((res) => { const id = ++rid; pend.set(id, res)
 const llm = llmW && {
   ready: () => llmOK,
   chat: async (messages, max) => (await call({ type: "chat", messages, max })).text,
+  chatRaw: async (messages, max) => { const r = await call({ type: "chat", messages, max }); if (r.error) throw new Error(r.message); return r.text; },
   search: async (query, ex, k) => (embOK ? (await call({ type: "search", query, ex, k })).ids : []),
 };
 if (llmW) llmW.onmessage = ({ data: d }) => {
@@ -157,16 +158,20 @@ const CHAT_SYS = "You are a friendly voice assistant and fitness coach. Answer i
 async function chatAnswer(q) {
   if (!llm || !llm.ready()) { say("My language model didn't load, so I can only handle workout commands."); return; }
   chatBusy = true; setState("thinking");
+  const clean = (x) => (x || "").replace(/[*_#`>~]+/g, "").replace(/\s+/g, " ").trim();
   try {
-    let t = ((await llm.chat([{ role: "system", content: CHAT_SYS }, ...chatHist.slice(-6), { role: "user", content: q }], 60)) || "").replace(/[*_#`>~]+/g, "").replace(/\s+/g, " ").trim();
+    let t = clean(await llm.chatRaw([{ role: "system", content: CHAT_SYS }, ...chatHist.slice(-4), { role: "user", content: q }], 60));
+    if (!t) t = clean(await llm.chatRaw([{ role: "user", content: q + " (Answer in one short sentence.)" }], 80));   // retry plain: no system prompt, no history
+    if (!t) throw new Error("the model returned an empty answer twice");
     const sents = t.match(/[^.!?]+[.!?]+/g);                     // keep at most two whole sentences, max ~35 words
-    if (sents) t = sents.slice(0, 2).join(" ").trim();
-    else if (t) t += ".";
+    if (sents) t = sents.slice(0, 2).join(" ").trim(); else t += ".";
     const w = t.split(" "); if (w.length > 35) t = w.slice(0, 35).join(" ").replace(/[,;:]$/, "") + ".";
-    if (!t) t = "Sorry, I couldn't come up with an answer to that.";
-    chatHist.push({ role: "user", content: q }, { role: "assistant", content: t });
+    chatHist.push({ role: "user", content: q }, { role: "assistant", content: t });   // only real answers go into history
     chatBusy = false; say(t, { urgent: true });
-  } catch (e) { chatBusy = false; say("Sorry, something went wrong answering that."); }
+  } catch (e) {
+    chatBusy = false; $("diag").textContent = "Chat error: " + (e.message || e); console.error(e);
+    say("Sorry, I hit a problem answering that.");
+  }
   if (!busyTTS && S) setState("listening");
 }
 // Only workout controls go to the rule-based agent; everything else is a free-form question for the LLM.
