@@ -27,7 +27,46 @@ from common import (DATA_DIR, METRICS_DIR, ROOT, extract_call, file_sha, load_kb
 TOOLS = ["give_cue", "adjust_plan", "retrieve_cues", "rest_timer", "start_exercise", "set_summary", "invalid"]
 
 
-# ---------------------------------------------------------------- rules baseline (port of TemplatePolicy + regexIntent)
+# ---------------------------------------------------------------- rules baseline (port of TemplatePolicy + regexIntent in agent.js)
+# tests/test_js_intent_parity.py runs the real agent.js regexIntent and asserts this port gives identical answers.
+NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+       "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15}
+WORDS = "|".join(NUM)
+SEC_WORDS = {"fifteen": 15, "thirty": 30, "forty five": 45, "sixty": 60, "ninety": 90}
+
+
+def clamp(v, lo, hi):
+    return min(hi, max(lo, v))
+
+
+def parse_seconds(t: str):
+    if re.search(r"three quarters of a minute", t):
+        return 45
+    if re.search(r"quarter of a minute", t):
+        return 15
+    m = re.search(r"(\d+)\s*(?:seconds?|secs?)\b", t)
+    if m:
+        return int(m[1])
+    if re.search(r"a minute and a half", t):
+        return 90
+    if re.search(r"half a minute", t):
+        return 30
+    m = re.search(rf"\b(\d+|{WORDS})\s*(?:minutes?|mins?)\b", t)
+    if m:
+        return 60 * NUM.get(m[1], int(m[1]) if m[1].isdigit() else 0)
+    if re.search(r"\b(?:a|one) minute\b", t):
+        return 60
+    m = re.search(r"\b(fifteen|thirty|forty[ -]five|sixty|ninety)\s*(?:seconds?|secs?)\b", t)
+    if m:
+        return SEC_WORDS[m[1].replace("-", " ")]
+    return None
+
+
+def reps_in(t: str):
+    m = re.search(rf"\b(\d{{1,2}}|{WORDS})\s+reps?\b", t)
+    return (NUM[m[1]] if m[1] in NUM else int(m[1])) if m else None
+
+
 def predict_rules(row: dict) -> dict | None:
     st = row["state"]
     if row["kind"] == "REP":
@@ -36,16 +75,37 @@ def predict_rules(row: dict) -> dict | None:
             return {"tool": "adjust_plan", "args": {"rest": st["rest"], "target": st["target"]}}
         top = sorted(st["errors"], key=lambda e: -e["sev"])[0]
         return {"tool": "give_cue", "args": {"cue_id": top["id"], "tone": "firm"}}
-    t = row["said"].lower()
-    if re.search(r"start|begin|switch|let's do", t) and re.search(r"squat|push|curl", t):
+    text = row["said"]
+    t = text.lower()
+    rest, target = st["rest"], st["target"]
+    secs, n = parse_seconds(t), reps_in(t)
+
+    def plan(r, g):
+        return {"tool": "adjust_plan", "args": {"rest": clamp(r, 10, 300), "target": clamp(g, 3, 20)}}
+
+    if re.search(r"start|begin|switch|let's do|change|want to do", t) and re.search(r"squat|push|curl", t):
         name = "squat" if "squat" in t else "pushup" if "push" in t else "curl"
         return {"tool": "start_exercise", "args": {"name": name}}
+    if re.search(r"\b(set|change|make|update)\b.*\brest\b", t) and secs:
+        return plan(secs, target)
+    if re.search(r"\b(easier|too hard|too difficult)\b", t):
+        return plan(rest + 30, target - 2)
+    if re.search(r"\b(fewer|reduce|decrease|less|lower)\b.*\breps?\b", t):
+        return plan(rest, target - 2)
+    if re.search(r"\b(more|increase|add|extra)\b.*\breps?\b", t):
+        return plan(rest, target + 2)
+    if re.search(r"\b(longer|more|extra|increase|lengthen)\b.*\brest\b", t):
+        return plan(rest + 30, target)
+    if re.search(r"\b(shorter|less|reduce|decrease|lower)\b.*\brest\b", t):
+        return plan(rest - 15, target)
+    if n:
+        return plan(rest, n)
     if re.search(r"how (was|did)|summary|finish|done|end (the )?set", t):
         return {"tool": "set_summary", "args": {}}
     if re.search(r"rest|break", t):
-        return {"tool": "rest_timer", "args": {"seconds": st["rest"]}}
+        return {"tool": "rest_timer", "args": {"seconds": clamp(secs if secs is not None else rest, 10, 300)}}
     if re.search(r"\b(why|how|what|should|tips?|help)\b", t):
-        return {"tool": "retrieve_cues", "args": {"query": row["said"]}}
+        return {"tool": "retrieve_cues", "args": {"query": text}}
     return None
 
 
