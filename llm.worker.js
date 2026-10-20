@@ -36,7 +36,7 @@ self.onmessage = async ({ data }) => {
       }
       post({ type: "ready", llm, emb: e, model: used });
     } else if (data.type === "chat") {
-      const out = await gen(data.messages, { max_new_tokens: 70, do_sample: false, return_full_text: false });
+      const out = await gen(data.messages, { max_new_tokens: 160, do_sample: false, return_full_text: false });
       const g = out[0].generated_text;
       post({ type: "result", id: data.id, text: Array.isArray(g) ? g.at(-1).content : g });
     } else if (data.type === "search") {

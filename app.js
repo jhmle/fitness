@@ -74,9 +74,9 @@ moon.onmessage = async ({ data: d }) => {
   else if (d.type === "ready") { $("pm").value = 100; onReady(); }
   else if (d.type === "text") {
     $("diag").textContent = "heard: " + d.text;
-    const handled = d.text && await agent.onVoice(d.text);
+    const handled = d.text && await utter(d.text);
     if (d.text && !handled) $("cueOut").textContent = "Heard: " + d.text;
-    hud(); if (!busyTTS && S) setState("listening");
+    hud(); if (!busyTTS && !chatBusy && S) setState("listening");
   }
   else if (d.type === "error") { fail(d, "Moonshine"); if (S) setState("listening"); }
 };
@@ -143,14 +143,37 @@ if (llmW) llmW.onmessage = ({ data: d }) => {
   else if (d.type === "error") { fail(d, "Coach brain"); llmDone(); }
 };
 
+// ---------------------------------------------------------------- general chat fallback
+// The agent only knows workout commands + a small tips knowledge base. When it has no tip, ask the LLM instead.
+let lastHeard = "", chatBusy = false;
+const chatHist = [];
+const CHAT_SYS = "You are a friendly voice assistant and fitness coach. Answer the user's question directly in one to three short spoken sentences. " +
+  "Plain words only: no markdown, lists, emojis or stage directions. If you are not sure, say so briefly.";
+async function chatAnswer(q) {
+  if (!llm || !llm.ready()) { say("My language model didn't load, so I can only handle workout commands."); return; }
+  chatBusy = true; setState("thinking");
+  try {
+    let t = ((await llm.chat([{ role: "system", content: CHAT_SYS }, ...chatHist.slice(-6), { role: "user", content: q }])) || "").trim();
+    if (t && !/[.!?]$/.test(t)) { const i = Math.max(t.lastIndexOf("."), t.lastIndexOf("!"), t.lastIndexOf("?")); if (i > 20) t = t.slice(0, i + 1); }   // don't end mid-sentence
+    if (!t) t = "Sorry, I couldn't come up with an answer to that.";
+    chatHist.push({ role: "user", content: q }, { role: "assistant", content: t });
+    chatBusy = false; say(t);
+  } catch (e) { chatBusy = false; say("Sorry, something went wrong answering that."); }
+  if (!busyTTS && S) setState("listening");
+}
+// Only workout controls go to the rule-based agent; everything else is a free-form question for the LLM.
+const CMD = /\b(start|begin|switch to|change to|stop|pause|resume|rest|break|reps?|sets?|easier|harder|longer|shorter|next set|how was|how did|how many|count)\b/i;
+function utter(t) { lastHeard = t; if (CMD.test(t)) return agent.onVoice(t); chatAnswer(t); return true; }
+const route = (text, o) => (lastHeard && /don'?t have a tip/i.test(text) ? chatAnswer(lastHeard) : say(text, o));
+
 // ---------------------------------------------------------------- agent
 const agent = new Agent({
-  say, llm, hud: () => hud(), policy: () => $("policy").value, stats: (t) => ($("stats").textContent = t),
+  say: route, llm, hud: () => hud(), policy: () => $("policy").value, stats: (t) => ($("stats").textContent = t),
   startExercise(name) { engine.set(name); $("ex").value = name; paused = false; },
   pause() { paused = true; },
 });
 $("ex").onchange = () => agent.exec({ tool: "start_exercise", args: { name: $("ex").value } });
-$("txt").onclick = () => { const t = $("prompt").value.trim(); if (t) { agent.onVoice(t); hud(); $("prompt").value = ""; } };
+$("txt").onclick = () => { const t = $("prompt").value.trim(); if (t) { utter(t); hud(); $("prompt").value = ""; } };
 
 // ---------------------------------------------------------------- pose loop: camera -> landmarks -> reps -> agent
 function draw(g, lm, w, h) {
