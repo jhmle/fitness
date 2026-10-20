@@ -11,6 +11,7 @@ const kokoro = PROFILE.tts === "kokoro" ? new Worker("kokoro.worker.js", { type:
 const llmW = PROFILE.llm ? new Worker("llm.worker.js", { type: "module" }) : null;
 const need = 2 + (kokoro ? 1 : 0) + (llmW ? 1 : 0);                       // pose+VAD, Moonshine, (Kokoro)
 let llmModel = null, ready = 0, starting = false, S = null, state = "off", vad = null, paused = false, busyTTS = 0, epoch = 0;
+let micStream = null;                                                       // mic stream we open ourselves and hand to the VAD
 const engine = new RepEngine("squat");
 const PTS = [...new Set(SKELETON.flat())];
 
@@ -185,6 +186,21 @@ function loop() {
 }
 function warn(t) { S.warn = true; $("hint").textContent = t; }
 
+// ---------------------------------------------------------------- microphone
+// Open the mic ourselves (with fallbacks) so a picky default doesn't kill voice commands.
+async function openMic() {
+  let err;
+  for (const audio of [{ channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }, true]) {
+    try { return await navigator.mediaDevices.getUserMedia({ audio }); } catch (e) { err = e; }
+  }
+  const devs = (await navigator.mediaDevices.enumerateDevices().catch(() => [])).filter((d) => d.kind === "audioinput");
+  for (const d of devs) {
+    if (!d.deviceId) continue;
+    try { return await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: d.deviceId } } }); } catch (e) { err = e; }
+  }
+  throw new Error(`${err?.name}: ${err?.message} (audio inputs found: ${devs.length})`);
+}
+
 // ---------------------------------------------------------------- session
 async function begin() {
   if (S || starting || ready < need) return;
@@ -199,8 +215,12 @@ async function begin() {
   let voiceErr = "";
   if ($("voiceOn").checked) {
     try {
+      micStream = await openMic();
       vad = await window.vad.MicVAD.new({                       // Silero VAD: only wake Moonshine on real speech
         baseAssetPath: VAD_URL, onnxWASMBasePath: ORT_URL,
+        getStream: async () => micStream,                        // use our stream instead of the VAD's own getUserMedia
+        pauseStream: async () => {},
+        resumeStream: async () => micStream,
         onSpeechStart: () => { if (S && !busyTTS) setState("hearing"); },
         onVADMisfire: () => { if (S && !busyTTS) setState("listening"); },
         onSpeechEnd: (audio) => {                                // Float32Array @ 16 kHz
@@ -210,7 +230,7 @@ async function begin() {
         },
       });
       vad.start();
-    } catch (e) { voiceErr = "Voice commands unavailable: " + e.message; }
+    } catch (e) { voiceErr = "Voice commands unavailable: " + (e.message || e); }
   }
   starting = false;
   $("mic").classList.add("on"); $("micLabel").textContent = "End session";
@@ -222,6 +242,7 @@ function end() {
   const s = S; if (!s) return; S = null;
   cancelAnimationFrame(s.raf); s.stream.getTracks().forEach((t) => t.stop());
   try { vad?.destroy(); } catch {} vad = null;
+  micStream?.getTracks().forEach((t) => t.stop()); micStream = null;
   stopSpeech(); clearTimeout(agent.restT);
   $("cam").srcObject = null; $("stage").classList.remove("cam"); $("ov").getContext("2d").clearRect(0, 0, 9999, 9999);
   $("mic").classList.remove("on"); $("micLabel").textContent = "Start session";
