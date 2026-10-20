@@ -45,11 +45,11 @@ Commit `data/test.jsonl`, `metrics/rules.json`, `metrics/production.json` (alrea
 
 ## 1. Train on Kaggle (free)
 
-1. Push the repo to GitHub (public, or add a token to the clone URL).
+1. Push the repo to GitHub (`github.com/jhmle/fitness`; it must be public, since the notebook clones it without a token).
 2. kaggle.com → **Create → New Notebook** → *File → Import Notebook* → upload `training/notebooks/kaggle_train.ipynb`.
 3. Right sidebar → **Session options**: Accelerator **GPU T4 x2** (or P100), **Internet: On** (phone verification required).
-4. Edit `REPO_URL` in the first cell → **Run All** (~15–30 min).
-5. From the **Output** tab download `results.zip`: contains `training/metrics/{base,candidate}.json`, `training/out/adapter`, `mlruns/`.
+4. **Run All** (~15–30 min). The notebook already clones `github.com/jhmle/fitness`, so there is nothing to edit.
+5. From the **Output** tab download `results.zip`: contains `training/metrics/{base,candidate}.json`, `training/out/adapter`, `mlflow.db`.
 
 Useful knobs: `python finetune_qlora.py --epochs 3 --lora-r 32 --lr 1e-4`. Mix in real data: download **Download session log** from the app after a few
 workouts, then `python gen_data.py --logs ~/Downloads/trainer-session*.json` (real states are relabelled by the teacher policy and added to train only).
@@ -57,8 +57,8 @@ workouts, then `python gen_data.py --logs ~/Downloads/trainer-session*.json` (re
 ## 2. Look at the MLflow runs
 
 ```bash
-unzip results.zip -d .            # restores mlruns/ at the repo root
-pip install mlflow && mlflow ui --backend-store-uri ./mlruns     # http://127.0.0.1:5000
+unzip results.zip -d .            # restores mlflow.db at the repo root
+pip install mlflow && mlflow ui --backend-store-uri sqlite:///mlflow.db     # http://127.0.0.1:5000
 ```
 You'll see a *trained* run (loss curves, hyper-parameters, adapter), an *evaluated* run per model (metrics, `eval.json` with the confusion matrix) and the
 registered model `trainer-coach` (a new version per `--register` run). Runs are tagged with `git_sha` and `test_sha`. Want a hosted UI? Create a free DagsHub repo and set
@@ -77,15 +77,15 @@ When it passes and you ship it: `python gate.py ... --promote` makes it the new 
 ## 4. Ship it to the browser (ONNX for transformers.js)
 
 ```bash
-HF_TOKEN=... python merge_export.py --adapter out/adapter --out out/merged --push YOUR_HF_USER/trainer-coach-smollm2-360m   # (notebook step 6)
+HF_TOKEN=... python merge_export.py --adapter out/adapter --out out/merged --push jhmle/trainer-coach-smollm2-360m   # (notebook step 6)
 
 # On any machine with Python (Kaggle works too): convert to ONNX + quantise with the transformers.js script.
 git clone https://github.com/huggingface/transformers.js && cd transformers.js
 pip install -r scripts/requirements.txt
-python -m scripts.convert --quantize --model_id YOUR_HF_USER/trainer-coach-smollm2-360m      # check `--help` for current flags
-# upload the produced folder (must contain onnx/model_q4.onnx) to a NEW HF repo, e.g. YOUR_HF_USER/trainer-coach-smollm2-360m-onnx
+python -m scripts.convert --quantize --model_id jhmle/trainer-coach-smollm2-360m      # check `--help` for current flags
+# upload the produced folder (must contain onnx/model_q4.onnx) to a NEW HF repo, e.g. jhmle/trainer-coach-smollm2-360m-onnx
 ```
-Then: set `LLM_ID = "YOUR_HF_USER/trainer-coach-smollm2-360m-onnx"` in `config.js`, add `"onnx_model": "<same id>"` to `metrics/candidate.json`, run `gate.py --promote`.
+Then: set `LLM_ID = "jhmle/trainer-coach-smollm2-360m-onnx"` in `config.js`, add `"onnx_model": "<same id>"` to `metrics/candidate.json`, run `gate.py --promote`.
 From then on CI fails if `config.js` points at a different model than the one that was evaluated.
 
 > The conversion step and the in-browser q4 quantisation are the least-tested links. `eval.py` scores the **fp16 merged** model; the browser runs **q4 ONNX**.
