@@ -141,3 +141,5 @@ pre#diag { margin: 6px 0 0; padding: 12px; background: #f3f5fa; border: 1px soli
 .hud div { background: rgba(0,0,0,.5); border-radius: 14px; padding: 8px 16px; font-weight: 800; font-size: 30px; line-height: 1.05; backdrop-filter: blur(6px); }
 .hud small { display: block; font-size: 11px; font-weight: 600; opacity: .8; letter-spacing: .05em; text-transform: uppercase; }
 @media (max-width: 700px) { .stage { min-height: 380px; } }
+
+.load-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }

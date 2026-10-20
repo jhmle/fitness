@@ -1,18 +1,20 @@
 import { PROFILE, VAD_URL, ORT_URL } from "./config.js";
 import { loadPose, detect } from "./pose.js";
 import { RepEngine, SKELETON } from "./exercises.js";
-import { Agent } from "./agent.js";
+import { Agent, kbDocs } from "./agent.js";
 
 const $ = (id) => document.getElementById(id);
 const setStatus = (text, kind = "idle") => { const s = $("status"); s.textContent = text; s.className = "pill pill-" + kind; };
 
 const moon = new Worker("moonshine.worker.js", { type: "module" });
 const kokoro = PROFILE.tts === "kokoro" ? new Worker("kokoro.worker.js", { type: "module" }) : null;
-const need = kokoro ? 3 : 2;                       // pose+VAD, Moonshine, (Kokoro)
+const llmW = PROFILE.llm ? new Worker("llm.worker.js", { type: "module" }) : null;
+const need = 2 + (kokoro ? 1 : 0) + (llmW ? 1 : 0);                       // pose+VAD, Moonshine, (Kokoro)
 let ready = 0, starting = false, S = null, state = "off", vad = null, paused = false, busyTTS = 0, epoch = 0;
 const engine = new RepEngine("squat");
 const PTS = [...new Set(SKELETON.flat())];
 
+if (!llmW) { $("lLabel").hidden = true; $("policy").parentElement.hidden = true; }
 if (!kokoro) { $("kLabel").hidden = true; $("voice").parentElement.hidden = true; }
 
 // ---------------------------------------------------------------- states (what the stage shows)
@@ -51,6 +53,7 @@ $("load").onclick = async () => {
   $("load").disabled = true; setStatus("Downloading models…", "loading");
   moon.postMessage({ type: "load" });
   if (kokoro) kokoro.postMessage({ type: "load" });
+  if (llmW) llmW.postMessage({ type: "load", kb: kbDocs() });
   try {
     const info = await loadPose(); $("pp").value = 60; $("diag").textContent = "pose: " + info;
     try { await loadScript(ORT_URL + "ort.wasm.min.js"); await loadScript(VAD_URL + "bundle.min.js"); }
@@ -58,12 +61,12 @@ $("load").onclick = async () => {
     $("pp").value = 100; onReady();
   } catch (e) { fail(e, "Pose"); }
 };
-moon.onmessage = ({ data: d }) => {
+moon.onmessage = async ({ data: d }) => {
   if (d.type === "progress") $("pm").value = d.pct;
   else if (d.type === "ready") { $("pm").value = 100; onReady(); }
   else if (d.type === "text") {
     $("diag").textContent = "heard: " + d.text;
-    const handled = d.text && agent.onVoice(d.text);
+    const handled = d.text && await agent.onVoice(d.text);
     if (d.text && !handled) $("cueOut").textContent = "Heard: " + d.text;
     hud(); if (!busyTTS && S) setState("listening");
   }
@@ -110,9 +113,26 @@ kokoro && (kokoro.onmessage = ({ data: d }) => {
 });
 $("skip").onclick = () => { stopSpeech(); if (S) setState("listening"); };
 
+// ---------------------------------------------------------------- coach brain worker (LLM + embeddings)
+const pend = new Map(); let rid = 0, llmOK = false, embOK = false, llmCounted = false;
+const llmDone = () => { if (!llmCounted) { llmCounted = true; onReady(); } };
+const call = (msg) => new Promise((res) => { const id = ++rid; pend.set(id, res); llmW.postMessage({ ...msg, id }); });
+const llm = llmW && {
+  ready: () => llmOK,
+  chat: async (messages) => (await call({ type: "chat", messages })).text,
+  search: async (query, ex, k) => (embOK ? (await call({ type: "search", query, ex, k })).ids : []),
+};
+if (llmW) llmW.onmessage = ({ data: d }) => {
+  if (d.type === "progress") $("pl").value = d.pct;
+  else if (d.type === "warn") { console.warn(d.message); $("diag").textContent = d.message; }
+  else if (d.type === "ready") { llmOK = d.llm; embOK = d.emb; $("pl").value = 100; llmDone(); }
+  else if (d.type === "result") { pend.get(d.id)?.(d); pend.delete(d.id); }
+  else if (d.type === "error") { fail(d, "Coach brain"); llmDone(); }
+};
+
 // ---------------------------------------------------------------- agent
 const agent = new Agent({
-  say,
+  say, llm, hud: () => hud(), policy: () => $("policy").value, stats: (t) => ($("stats").textContent = t),
   startExercise(name) { engine.set(name); $("ex").value = name; paused = false; },
   pause() { paused = true; },
 });
@@ -199,3 +219,9 @@ function end() {
 }
 $("mic").onclick = () => (S ? end() : begin());
 setState("off");
+
+$("dl").onclick = () => {                           // session trace = future training / eval data
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(agent.log, null, 1)], { type: "application/json" }));
+  a.download = "trainer-session.json"; a.click(); URL.revokeObjectURL(a.href);
+};

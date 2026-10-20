@@ -30,6 +30,7 @@
       <label class="meter"><span>Pose + voice detection</span><progress id="pp" max="100" value="0"></progress></label>
       <label class="meter"><span>Moonshine (hears you)</span><progress id="pm" max="100" value="0"></progress></label>
       <label class="meter" id="kLabel"><span>Kokoro (speaks)</span><progress id="pk" max="100" value="0"></progress></label>
+      <label class="meter" id="lLabel"><span>Coach brain (LLM + search)</span><progress id="pl" max="100" value="0"></progress></label>
       <button id="load" class="btn btn-primary">Load models</button>
     </div>
   </section>
@@ -58,6 +59,7 @@
       <select id="ex"><option value="squat">Squat</option><option value="pushup">Push-up</option><option value="curl">Curl</option></select></label>
     <label class="switch"><input type="checkbox" id="speakOn" checked><span class="slider"></span><span>Speak cues</span></label>
     <label class="switch"><input type="checkbox" id="voiceOn" checked><span class="slider"></span><span>Voice commands</span></label>
+    <label class="inline"><span>Coach</span><select id="policy"><option value="llm">LLM agent</option><option value="template">Rules only</option></select></label>
     <label class="inline"><span>Voice</span><select id="voice"></select></label>
   </div>
 
@@ -66,6 +68,8 @@
     <p class="muted small">Try: "start push-ups", "how was that set", "why do my knees hurt", "rest".</p>
     <label class="field"><span>Command</span><textarea id="prompt" rows="2" placeholder="Type what you would say"></textarea></label>
     <div class="row"><button id="txt" class="btn">Send</button></div>
+    <div class="row"><button id="dl" class="btn">Download session log</button></div>
+    <p class="small muted" id="stats">Cue fix rate: rules n/a · LLM n/a</p>
     <div class="small muted diag-label">Last rep</div>
     <pre id="diag"></pre>
   </details>
