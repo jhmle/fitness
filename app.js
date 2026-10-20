@@ -134,7 +134,7 @@ const call = (msg) => new Promise((res) => { const id = ++rid; pend.set(id, res)
 const llm = llmW && {
   ready: () => llmOK,
   chat: async (messages, max) => (await call({ type: "chat", messages, max })).text,
-  chatRaw: async (messages, max) => { const r = await call({ type: "chat", messages, max }); if (r.error) throw new Error(r.message); return r.text; },
+  chatRaw: async (messages, max) => { const r = await call({ type: "chat", messages, max }); if (r.error) throw new Error(r.message); llmRaw = r.raw || ""; return r.text; },
   search: async (query, ex, k) => (embOK ? (await call({ type: "search", query, ex, k })).ids : []),
 };
 if (llmW) llmW.onmessage = ({ data: d }) => {
@@ -151,27 +151,31 @@ if (llmW) llmW.onmessage = ({ data: d }) => {
 
 // ---------------------------------------------------------------- general chat fallback
 // The agent only knows workout commands + a small tips knowledge base. When it has no tip, ask the LLM instead.
-let lastHeard = "", lastHeardAt = 0, chatBusy = false;
+let lastHeard = "", lastHeardAt = 0, chatBusy = false, llmRaw = "";
 const chatHist = [];
 const CHAT_SYS = "You are a friendly voice assistant and fitness coach. Answer in ONE short spoken sentence, 20 words at most. Never more than two sentences. " +
   "Plain words only: no markdown, lists, emojis or stage directions. If you are not sure, say so briefly.";
 async function chatAnswer(q) {
   if (!llm || !llm.ready()) { say("My language model didn't load, so I can only handle workout commands."); return; }
   chatBusy = true; setState("thinking");
+  let reply = "", err = "";
   const clean = (x) => (x || "").replace(/[*_#`>~]+/g, "").replace(/\s+/g, " ").trim();
   try {
     let t = clean(await llm.chatRaw([{ role: "system", content: CHAT_SYS }, ...chatHist.slice(-4), { role: "user", content: q }], 60));
     if (!t) t = clean(await llm.chatRaw([{ role: "user", content: q + " (Answer in one short sentence.)" }], 80));   // retry plain: no system prompt, no history
-    if (!t) throw new Error("the model returned an empty answer twice");
+    if (!t) throw new Error("the model returned an empty answer twice. Raw output: " + llmRaw);
     const sents = t.match(/[^.!?]+[.!?]+/g);                     // keep at most two whole sentences, max ~35 words
     if (sents) t = sents.slice(0, 2).join(" ").trim(); else t += ".";
     const w = t.split(" "); if (w.length > 35) t = w.slice(0, 35).join(" ").replace(/[,;:]$/, "") + ".";
     chatHist.push({ role: "user", content: q }, { role: "assistant", content: t });   // only real answers go into history
-    chatBusy = false; say(t, { urgent: true });
+    reply = t;
   } catch (e) {
-    chatBusy = false; $("diag").textContent = "Chat error: " + (e.message || e); console.error(e);
-    say("Sorry, I hit a problem answering that.");
+    $("diag").textContent = "Chat error: " + (e.message || e); console.error(e);
+    err = String(e.message || e).slice(0, 160);
   }
+  chatBusy = false;
+  if (reply) { try { say(reply, { urgent: true }); } catch (e) { console.error(e); $("cueOut").textContent = reply; } }
+  else { say("Sorry, I hit a problem answering that."); $("cueOut").textContent = "Sorry, I hit a problem answering that.\n(" + err + ")"; }
   if (!busyTTS && S) setState("listening");
 }
 // Only workout controls go to the rule-based agent; everything else is a free-form question for the LLM.

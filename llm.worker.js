@@ -1,16 +1,24 @@
 // Coach brain: small instruct LLM (decisions) + MiniLM embeddings (RAG over the knowledge base).
 import { TRANSFORMERS_URL, LLM_ID, EMBED_ID } from "./config.js";
-let T, gen, emb, kb = [], kv = [];
+let T, gen, emb, kb = [], kv = [], curId = null, curDevice = null;
 const post = (m) => self.postMessage(m);
 const prog = (lo, hi) => (p) => p.status === "progress_total" && post({ type: "progress", pct: lo + (hi - lo) * p.progress / 100 });
+// Pull the assistant's text out of whatever shape the pipeline returns (string, chat array, or nested content).
+const pick = (out) => {
+  let g = Array.isArray(out) ? out[0] : out;
+  g = g?.generated_text ?? g;
+  if (Array.isArray(g)) { const m = [...g].reverse().find((x) => x && x.role === "assistant") || g.at(-1); g = m?.content ?? m; }
+  if (Array.isArray(g)) g = g.map((x) => x?.text ?? x).join("");
+  return typeof g === "string" ? g : "";
+};
 const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
 
 // Try q4 first (what the app ships), then q8/fp16, on WebGPU then WASM, so a model exported with different quantisations still loads.
-async function loadLLM(id) {
+async function loadLLM(id, wasmOnly = false) {
   const errs = [];
-  for (const device of self.navigator?.gpu ? ["webgpu", "wasm"] : ["wasm"]) {
+  for (const device of self.navigator?.gpu && !wasmOnly ? ["webgpu", "wasm"] : ["wasm"]) {
     for (const dtype of ["q4", "q4f16", "q8", "uint8", "fp16"]) {
-      try { return await T.pipeline("text-generation", id, { dtype, device, progress_callback: prog(15, 100) }); }
+      try { const p = await T.pipeline("text-generation", id, { dtype, device, progress_callback: prog(15, 100) }); curId = id; curDevice = device; return p; }
       catch (x) { errs.push(`${device}/${dtype}: ${String(x.message || x).slice(0, 120)}`); }
     }
   }
@@ -36,9 +44,15 @@ const handle = async ({ data }) => {
       }
       post({ type: "ready", llm, emb: e, model: used, why });
     } else if (data.type === "chat") {
-      const out = await gen(data.messages, { max_new_tokens: data.max || 70, do_sample: false, return_full_text: false });
-      const g = out[0].generated_text;
-      post({ type: "result", id: data.id, text: Array.isArray(g) ? g.at(-1).content : g });
+      const run = () => gen(data.messages, { max_new_tokens: data.max || 70, do_sample: false, return_full_text: false });
+      let out;
+      try { out = await run(); }
+      catch (x) {                                              // WebGPU generation failed: rebuild on WASM (slower, but reliable) and retry once
+        if (curDevice === "wasm") throw x;
+        post({ type: "warn", message: "WebGPU generation failed (" + String(x.message || x).slice(0, 120) + "), switching the coach model to WASM" });
+        gen = await loadLLM(curId, true); out = await run();
+      }
+      post({ type: "result", id: data.id, text: pick(out), raw: JSON.stringify(out).slice(0, 300) });
     } else if (data.type === "search") {
       const q = (await emb(data.query, { pooling: "mean", normalize: true })).data;
       const ids = kb.map((d, i) => ({ id: d.id, ok: d.ex === data.ex || d.ex === "any", s: dot(q, kv[i]) }))
