@@ -38,7 +38,11 @@ function refresh() {
 const hud = () => { $("repN").textContent = agent.reps.length; $("setN").textContent = agent.set; };
 
 // ---------------------------------------------------------------- loading
-const fail = (e) => setStatus("Error: " + (e.message || e), "error");
+const fail = (e, who = "") => {                      // always say which component failed
+  const msg = String(e.message || e); console.error(who, e);
+  $("dbg").textContent = who + ": " + msg;
+  setStatus(`Error${who ? " (" + who + ")" : ""}: ` + msg.slice(0, 180), "error");
+};
 const onReady = () => { if (++ready < need) return; $("setup").classList.add("done"); setState("off"); };
 function loadScript(src) {
   return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("failed to load " + src)); document.head.append(s); });
@@ -48,10 +52,11 @@ $("load").onclick = async () => {
   moon.postMessage({ type: "load" });
   if (kokoro) kokoro.postMessage({ type: "load" });
   try {
-    await loadPose(); $("pp").value = 60;
-    await loadScript(ORT_URL + "ort.wasm.min.js"); await loadScript(VAD_URL + "bundle.min.js"); $("pp").value = 100;
-    onReady();
-  } catch (e) { fail(e); }
+    const info = await loadPose(); $("pp").value = 60; $("dbg").textContent = "pose: " + info;
+    try { await loadScript(ORT_URL + "ort.wasm.min.js"); await loadScript(VAD_URL + "bundle.min.js"); }
+    catch (e) { return fail(e, "Voice detection"); }
+    $("pp").value = 100; onReady();
+  } catch (e) { fail(e, "Pose"); }
 };
 moon.onmessage = ({ data: d }) => {
   if (d.type === "progress") $("pm").value = d.pct;
@@ -62,7 +67,7 @@ moon.onmessage = ({ data: d }) => {
     if (d.text && !handled) $("out").textContent = "Heard: " + d.text;
     hud(); if (!busyTTS && S) setState("listening");
   }
-  else if (d.type === "error") { fail(d); if (S) setState("listening"); }
+  else if (d.type === "error") { fail(d, "Moonshine"); if (S) setState("listening"); }
 };
 
 // ---------------------------------------------------------------- speech out (Kokoro on desktop, browser voice on mobile)
@@ -101,7 +106,7 @@ kokoro && (kokoro.onmessage = ({ data: d }) => {
     onReady();
   }
   else if (d.type === "audio") { if (d.id === epoch) play(d.samples, d.rate); }
-  else if (d.type === "error") { if (d.id === epoch) done(); fail(d); }
+  else if (d.type === "error") { if (d.id === epoch) done(); fail(d, "Kokoro"); }
 });
 $("skip").onclick = () => { stopSpeech(); if (S) setState("listening"); };
 
