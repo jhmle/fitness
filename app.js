@@ -11,6 +11,7 @@ const kokoro = PROFILE.tts === "kokoro" ? new Worker("kokoro.worker.js", { type:
 const llmW = PROFILE.llm ? new Worker("llm.worker.js", { type: "module" }) : null;
 const need = 2 + (kokoro ? 1 : 0) + (llmW ? 1 : 0);                       // pose+VAD, Moonshine, (Kokoro)
 let llmModel = null, ready = 0, starting = false, S = null, state = "off", vad = null, paused = false, busyTTS = 0, epoch = 0;
+let lastMeter = 0;
 let micStream = null;                                                       // mic stream we open ourselves and hand to the VAD
 const engine = new RepEngine("squat");
 const PTS = [...new Set(SKELETON.flat())];
@@ -105,6 +106,7 @@ function say(text, { urgent = false } = {}) {
   if (busyTTS && !urgent) return;                  // don't talk over ourselves: drop routine cues
   if (urgent) stopSpeech();
   busyTTS++; setState("speaking");
+  { const e = epoch; setTimeout(() => { if (e === epoch && busyTTS && S) { busyTTS = 0; setState("listening"); } }, 20000); }   // never stay deaf if audio fails to finish
   if (kokoro) kokoro.postMessage({ type: "speak", text, voice: $("voice").value, id: epoch });
   else { const e = epoch, u = new SpeechSynthesisUtterance(text); u.onend = u.onerror = () => e === epoch && done(); speechSynthesis.speak(u); }
 }
@@ -218,6 +220,16 @@ async function begin() {
       micStream = await openMic();
       vad = await window.vad.MicVAD.new({                       // Silero VAD: only wake Moonshine on real speech
         baseAssetPath: VAD_URL, onnxWASMBasePath: ORT_URL,
+        positiveSpeechThreshold: 0.4, negativeSpeechThreshold: 0.25,   // easier to trigger on quiet or distant speech
+        redemptionMs: 600,                                       // end your turn after 0.6 s of quiet (default is longer)
+        minSpeechMs: 150, preSpeechPadMs: 300,                   // catch short commands, keep the first syllable
+        onFrameProcessed: (p) => {                               // live meter so you can SEE the mic is being heard
+          const now = performance.now();
+          if (S && !S.warn && state === "listening" && now - lastMeter > 120) {
+            lastMeter = now; const n = Math.round(p.isSpeech * 10);
+            $("hint").textContent = "Mic live  " + "▮".repeat(n) + "▯".repeat(10 - n);
+          }
+        },
         getStream: async () => micStream,                        // use our stream instead of the VAD's own getUserMedia
         pauseStream: async () => {},
         resumeStream: async () => micStream,
