@@ -159,7 +159,7 @@ def log_mlflow(a, result, adapter):
     except ImportError:
         print("mlflow not installed: skipping tracking (pip install mlflow)")
         return
-    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", f"file:{ROOT / 'mlruns'}"))
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", f"sqlite:///{ROOT / 'mlflow.db'}"))
     mlflow.set_experiment(a.experiment)
     with mlflow.start_run(run_name=a.name) as run:
         mlflow.log_params({"predictor": a.predictor, "model": a.model or "-", "adapter": adapter or "-", "n_test": result["n"], "limit": a.limit or 0})

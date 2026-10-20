@@ -11,9 +11,12 @@ Kaggle (free T4/P100, internet on):
 Outputs: out/adapter (LoRA weights + tokenizer). Metrics/params go to MLflow (file store at <repo>/mlruns by default).
 """
 import os
+import pathlib
 
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")      # Kaggle "T4 x2": avoid DataParallel with a 4-bit model
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+# Trainer(report_to=["mlflow"]) reads this env var, so it logs to the same store as the explicit calls below
+os.environ.setdefault("MLFLOW_TRACKING_URI", f"sqlite:///{pathlib.Path(__file__).resolve().parent.parent / 'mlflow.db'}")
 
 import argparse  # noqa: E402
 import json  # noqa: E402
@@ -110,7 +113,7 @@ def main():
     if not a.no_mlflow:
         try:
             import mlflow
-            mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", f"file:{ROOT / 'mlruns'}"))
+            mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", f"sqlite:///{ROOT / 'mlflow.db'}"))
             mlflow.set_experiment(a.experiment)
             run = mlflow.start_run(run_name=f"qlora-{a.base.split('/')[-1]}")
             mlflow.log_params({**{k: v for k, v in vars(a).items()}, "train_sha": file_sha(a.train), "n_train": len(train_ds)})
