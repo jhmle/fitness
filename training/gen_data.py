@@ -5,7 +5,7 @@ Each row is one decision the agent asks the LLM to make (agent.js ask()):
   Set end                     -> adjust_plan
   VOICE commands              -> retrieve_cues / rest_timer / start_exercise / set_summary / adjust_plan
 
-Rep events are simulated with NumPy using the same thresholds as web/exercises.js, with fatigue drift so the
+Rep events are simulated with NumPy using the same thresholds as exercises.js, with fatigue drift so the
 `trend.depth_loss_deg` feature is realistic. Labels come from a deterministic teacher policy that follows the
 rules written in the SYSTEM prompt. Test voice phrasings are HELD OUT from the train phrasings, so the
 test set measures generalisation, not memorisation.
@@ -26,7 +26,7 @@ import numpy as np
 
 from common import ALLOW_REP, ALLOW_SET_END, ALLOW_VOICE, DATA_DIR, NAMES, file_sha, js_dumps, load_kb
 
-# ---- thresholds copied from web/exercises.js check(); depth = min joint angle (degrees) above which depth fails.
+# ---- thresholds copied from exercises.js check(); depth = min joint angle (degrees) above which depth fails.
 SIM = {
     #          depth_id        form_id        base_min  sd   depth_thr  form(mean,sd,thr,'gt'|'lt')   fast_thr  dur(mean,sd)
     "squat":  ("squat_depth",  "squat_lean",  98, 14, 110, (45, 13, 60, "gt"),  1.2, (1.9, 0.5)),

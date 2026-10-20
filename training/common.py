@@ -1,6 +1,6 @@
 """Shared helpers for data generation, training and evaluation.
 
-Single source of truth: the SYSTEM prompt and the knowledge base (KB) are *parsed from web/agent.js*,
+Single source of truth: the SYSTEM prompt and the knowledge base (KB) are *parsed from agent.js*,
 so the model is always trained on exactly the prompt the browser will send. If you edit agent.js,
 regenerate the data (gen_data.py) and the tests will tell you if anything drifted.
 """
@@ -14,7 +14,18 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-AGENT_JS = pathlib.Path(os.getenv("AGENT_JS", ROOT / "web" / "agent.js"))
+
+
+def _find(name):
+    """App files may live in web/, docs/ or the repo root (GitHub Pages layouts differ)."""
+    for p in (ROOT / "web" / name, ROOT / name, ROOT / "docs" / name):
+        if p.exists():
+            return p
+    return ROOT / "web" / name
+
+
+AGENT_JS = pathlib.Path(os.getenv("AGENT_JS") or _find("agent.js"))
+APP_DIR = AGENT_JS.parent
 DATA_DIR = pathlib.Path(__file__).resolve().parent / "data"
 METRICS_DIR = pathlib.Path(__file__).resolve().parent / "metrics"
 NAMES = ["squat", "pushup", "curl"]
@@ -27,7 +38,7 @@ ALLOW_VOICE = ["retrieve_cues", "adjust_plan", "rest_timer", "start_exercise", "
 
 def _src() -> str:
     if not AGENT_JS.exists():
-        raise FileNotFoundError(f"{AGENT_JS} not found. Run from the repo root, or set AGENT_JS=/path/to/agent.js")
+        raise FileNotFoundError(f"{AGENT_JS} not found. Looked in web/, docs/ and the repo root. Set AGENT_JS=/path/to/agent.js")
     return AGENT_JS.read_text(encoding="utf-8")
 
 

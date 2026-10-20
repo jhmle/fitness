@@ -1,15 +1,15 @@
 # training/: fine-tune, evaluate, gate, deploy the coach brain
 
-The browser agent (`web/agent.js`) asks a small LLM for **one JSON tool call** on rep errors, set ends and voice commands.
+The browser agent (`agent.js`) asks a small LLM for **one JSON tool call** on rep errors, set ends and voice commands.
 This folder fine-tunes that model with **QLoRA**, scores it against the rule-based policy on a **frozen test set**, tracks
-everything in **MLflow**, and lets **GitHub Actions** block a deploy that regresses.
+everything in **MLflow**, and lets **GitHub Actions** block a merge that regresses.
 
 ```
-web/agent.js ──(SYSTEM prompt + KB parsed at runtime)──► common.py ──► gen_data.py ──► data/{train,val,test}.jsonl
+agent.js ──(SYSTEM prompt + KB parsed at runtime)──► common.py ──► gen_data.py ──► data/{train,val,test}.jsonl
                                                                                            │
                        Kaggle GPU:  finetune_qlora.py ──► out/adapter ──► eval.py ──► metrics/candidate.json
                                                                               │ (MLflow: params, metrics, adapter, version)
-GitHub Actions:  pytest ► eval rules ► gate.py (vs metrics/production.json) ► deploy web/ to Pages
+GitHub Actions:  pytest ► eval rules ► gate.py (vs metrics/production.json) ► required check on main
 ```
 
 | File | What it does |
@@ -31,7 +31,7 @@ Metrics (all on the frozen test set, every output goes through the same `validat
 
 ## 0. Put it in your repo (once)
 
-Repo layout expected: `web/` (your app), `training/` (this folder), `.github/workflows/ci.yml`.
+Repo layout: your app files (`agent.js`, `config.js`, ... in the repo root, `web/` or `docs/`: auto-detected), `training/` (this folder), `.github/workflows/ci.yml`. Override with `AGENT_JS=/path/to/agent.js`.
 Copy `training/` and `.github/` into the repo root, then:
 
 ```bash
@@ -85,7 +85,7 @@ pip install -r scripts/requirements.txt
 python -m scripts.convert --quantize --model_id YOUR_HF_USER/trainer-coach-smollm2-360m      # check `--help` for current flags
 # upload the produced folder (must contain onnx/model_q4.onnx) to a NEW HF repo, e.g. YOUR_HF_USER/trainer-coach-smollm2-360m-onnx
 ```
-Then: set `LLM_ID = "YOUR_HF_USER/trainer-coach-smollm2-360m-onnx"` in `web/config.js`, add `"onnx_model": "<same id>"` to `metrics/candidate.json`, run `gate.py --promote`.
+Then: set `LLM_ID = "YOUR_HF_USER/trainer-coach-smollm2-360m-onnx"` in `config.js`, add `"onnx_model": "<same id>"` to `metrics/candidate.json`, run `gate.py --promote`.
 From then on CI fails if `config.js` points at a different model than the one that was evaluated.
 
 > The conversion step and the in-browser q4 quantisation are the least-tested links. `eval.py` scores the **fp16 merged** model; the browser runs **q4 ONNX**.
@@ -94,11 +94,10 @@ From then on CI fails if `config.js` points at a different model than the one th
 ## 5. CI/CD (GitHub Actions)
 
 `.github/workflows/ci.yml` on every push/PR: `pytest` → evaluate rules (logged to MLflow, uploaded as artifact) → gate rules vs `metrics/rules.json` →
-(if `metrics/candidate.json` exists) gate candidate vs production → on `main` deploy `web/` to GitHub Pages.
+(if `metrics/candidate.json` exists) gate candidate vs production.
 Manual run (**Actions → ci → Run workflow**) with `model_id` re-computes a model's metrics on CPU (first 150 test rows) and gates them, so committed numbers can be spot-checked.
 
-One-time setting: repo **Settings → Pages → Source: GitHub Actions**. If you deploy another way (branch/root), delete the `deploy` job and make the
-`test-and-gate` job a required status check instead.
+One-time setting: repo **Settings → Branches → add rule for `main` → require status check `test-and-gate`**, and work through pull requests, so a failing gate blocks the merge that would publish to Pages. (Pages keeps deploying from your branch as it does today.)
 
 ## Be honest about what this measures
 

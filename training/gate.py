@@ -7,7 +7,7 @@ Checks
   1. candidate was evaluated on the CURRENT frozen test set (hash match), otherwise the numbers are not comparable
   2. absolute floor on valid-JSON rate (--min-valid)
   3. no regression vs production on overall and per-slice action accuracy, advice-error rate, unsupported cues
-  4. deploy consistency: if production.json names an ONNX model, web/config.js LLM_ID must be that exact model
+  4. deploy consistency: if production.json names an ONNX model, config.js LLM_ID must be that exact model
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import json
 import re
 import sys
 
-from common import DATA_DIR, ROOT, file_sha
+from common import APP_DIR, DATA_DIR, file_sha
 
 
 def load(p):
@@ -32,7 +32,7 @@ def main() -> int:
     ap.add_argument("--tol", type=float, default=0.01, help="allowed overall regression")
     ap.add_argument("--slice-tol", type=float, default=0.03, help="allowed per-slice regression")
     ap.add_argument("--promote", action="store_true", help="overwrite production.json with the candidate if all checks pass")
-    ap.add_argument("--config", default=str(ROOT / "web" / "config.js"))
+    ap.add_argument("--config", default=str(APP_DIR / "config.js"))
     a = ap.parse_args()
 
     cand, prod = load(a.candidate), load(a.production)
@@ -60,7 +60,7 @@ def main() -> int:
     except FileNotFoundError:
         deployed = None
     if onnx:
-        check("deploy consistency", deployed == onnx, f"web/config.js LLM_ID={deployed} vs production {onnx}")
+        check("deploy consistency", deployed == onnx, f"config.js LLM_ID={deployed} vs production {onnx}")
 
     for status, name, detail in rows:
         print(f"[{status}] {name}: {detail}")
