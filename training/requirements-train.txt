@@ -1,0 +1,6 @@
+-r requirements-ci.txt
+# Kaggle already ships torch; install these on top: pip install -q -U -r requirements-train.txt
+transformers>=4.45
+peft>=0.12
+accelerate>=0.34
+bitsandbytes>=0.43
