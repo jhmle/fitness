@@ -8,7 +8,7 @@ const setStatus = (text, kind = "idle") => { const s = $("status"); s.textConten
 
 const moon = new Worker("moonshine.worker.js", { type: "module" });
 const kokoro = PROFILE.tts === "kokoro" ? new Worker("kokoro.worker.js", { type: "module" }) : null;
-const llmW = PROFILE.llm ? new Worker("llm.worker.js", { type: "module" }) : null;
+const llmW = PROFILE.llm ? new Worker("llm.worker.js?v=4", { type: "module" }) : null;
 const need = 2 + (kokoro ? 1 : 0) + (llmW ? 1 : 0);                       // pose+VAD, Moonshine, (Kokoro)
 let llmModel = null, ready = 0, starting = false, S = null, state = "off", vad = null, paused = false, busyTTS = 0, epoch = 0;
 let lastMeter = 0;
@@ -142,7 +142,7 @@ if (llmW) llmW.onmessage = ({ data: d }) => {
   else if (d.type === "warn") { console.warn(d.message); $("diag").textContent = d.message; }
   else if (d.type === "ready") {
     llmOK = d.llm; embOK = d.emb; llmModel = d.model; $("pl").value = 100;
-    $("modelNote").textContent = d.llm ? "Coach brain: " + d.model + (d.model !== $("llmModel").value ? " (fallback: the selected model failed to load)" : "") : "Coach brain: NOT loaded, rules only. " + (d.why || "");
+    $("modelNote").textContent = d.llm ? "Coach brain: " + d.model + " [" + d.run + "]" + (d.model !== $("llmModel").value ? " (fallback: the selected model failed to load)" : "") : "Coach brain: NOT loaded, rules only. " + (d.why || "");
     llmDone();
   }
   else if (d.type === "result") { pend.get(d.id)?.(d); pend.delete(d.id); }

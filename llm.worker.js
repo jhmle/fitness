@@ -1,6 +1,6 @@
 // Coach brain: small instruct LLM (decisions) + MiniLM embeddings (RAG over the knowledge base).
 import { TRANSFORMERS_URL, LLM_ID, EMBED_ID } from "./config.js";
-let T, gen, emb, kb = [], kv = [], curId = null, curDevice = null;
+let T, gen, emb, kb = [], kv = [], curId = null, curDevice = null, curDtype = null;
 const post = (m) => self.postMessage(m);
 const prog = (lo, hi) => (p) => p.status === "progress_total" && post({ type: "progress", pct: lo + (hi - lo) * p.progress / 100 });
 // Pull the assistant's text out of whatever shape the pipeline returns (string, chat array, or nested content).
@@ -13,13 +13,23 @@ const pick = (out) => {
 };
 const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
 
-// Try q4 first (what the app ships), then q8/fp16, on WebGPU then WASM, so a model exported with different quantisations still loads.
+// Load the model on the first device/quantisation combo that can actually GENERATE. Each candidate gets a short warm-up run
+// (prompt + a few decode steps), because some WebGPU builds load fine but crash inside OrtRun on the first real generation.
+const WARM = [{ role: "system", content: "You are a helpful voice assistant. Answer in one short sentence." }, { role: "user", content: "Tell me one quick tip for doing a good squat." }];
 async function loadLLM(id, wasmOnly = false) {
   const errs = [];
-  for (const device of self.navigator?.gpu && !wasmOnly ? ["webgpu", "wasm"] : ["wasm"]) {
-    for (const dtype of ["q4", "q4f16", "q8", "uint8", "fp16"]) {
-      try { const p = await T.pipeline("text-generation", id, { dtype, device, progress_callback: prog(15, 100) }); curId = id; curDevice = device; return p; }
-      catch (x) { errs.push(`${device}/${dtype}: ${String(x.message || x).slice(0, 120)}`); }
+  const plans = [];
+  if (self.navigator?.gpu && !wasmOnly) for (const d of ["q4", "q4f16", "fp16"]) plans.push(["webgpu", d]);
+  for (const d of ["q8", "q4", "uint8"]) plans.push(["wasm", d]);
+  for (const [device, dtype] of plans) {
+    let p;
+    try {
+      p = await T.pipeline("text-generation", id, { dtype, device, progress_callback: prog(15, 100) });
+      await p(WARM, { max_new_tokens: 6, do_sample: false, return_full_text: false });   // proves it really runs
+      curId = id; curDevice = device; curDtype = dtype; return p;
+    } catch (x) {
+      errs.push(`${device}/${dtype}: ${String(x.message || x).slice(0, 110)}`);
+      try { await p?.dispose?.(); } catch {}
     }
   }
   throw new Error(errs.join(" | "));
@@ -42,7 +52,7 @@ const handle = async ({ data }) => {
         try { gen = await loadLLM(id); llm = true; used = id; break; }
         catch (x) { why = `LLM ${id}: ${x.message || x}`; post({ type: "warn", message: `LLM ${id}: ${x.message || x}` + (id !== LLM_ID ? " (falling back to " + LLM_ID + ")" : "") }); }
       }
-      post({ type: "ready", llm, emb: e, model: used, why });
+      post({ type: "ready", llm, emb: e, model: used, why, run: curDevice + "/" + curDtype });
     } else if (data.type === "chat") {
       const run = () => gen(data.messages, { max_new_tokens: data.max || 70, do_sample: false, return_full_text: false });
       let out;
