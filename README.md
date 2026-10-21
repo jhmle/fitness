@@ -5,13 +5,13 @@
 ### 🔗 [Try the live demo (laptop or desktop only)](https://jhmle.github.io/fitness/)
 
 > **Heads up: the AI runs on your own device, so the demo may not work on yours.** All the models run locally in your browser (about 250 MB, downloaded once).
-> - **Best on:** a laptop or desktop with a webcam, a microphone and plenty of free RAM.
+> - **Best on:** a laptop or desktop with a webcam, microphone, and plenty of RAM.
 > - ⚠️ **Not recommended on phones or tablets:** they will likely run out of memory and crash or reload.
-> - If the voice is slow or missing, switch on Fast voice (uses your browser's built-in voice instead of Kokoro).
+> - If the voice is slow or missing switch on Fast voice (uses your browser's built-in voice instead of Kokoro).
 
 ## What it does
 
-- **Counts reps and sets** for squats, push-ups and bicep curls using your camera
+- **Counts reps and sets** for squats, push-ups, and bicep curls using your camera
 - **Checks your form** (depth, posture, speed) and flags what to fix
 - **Talks to you** with short spoken cues like "Chest up" or "Go a bit deeper"
 - **Listens to you**, so you can say things like "30 seconds rest" or "switch to push-ups" hands-free
