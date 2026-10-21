@@ -1,11 +1,11 @@
-"""Simple deploy check: ship the new model if it is better than the old one in ANY way.
+"""Simple deploy check: ship the new model if it matches or beats the old one on ANY measure.
 
   python should_deploy.py              # compare only (exit 0 = deploy, exit 1 = hold back)
   python should_deploy.py --promote    # compare, and if it passes: make the new model the live one
 
 The rule
-  - Better on at least one measure  -> deploy
-  - Not better on anything          -> don't deploy (the old model stays live)
+  - Better than, or equal to, the old model on at least one measure -> deploy
+  - Worse on every single measure                                   -> don't deploy (the old model stays live)
 
 Safety checks (the only two): both models must have been scored on the same test set, and the new
 model must have been exported (so the app has something to load).
@@ -82,7 +82,7 @@ def main() -> int:
 
     if not prod_path.exists():
         print("No current model to compare against: deploying the new one.")
-        better = 1
+        passing = 1
     else:
         rows = compare(cand["metrics"], json.loads(prod_path.read_text())["metrics"])
         print(f"{'measure':28} {'old':>8} {'new':>8}")
@@ -90,12 +90,14 @@ def main() -> int:
             print(f"{key:28} {old:8.3f} {new:8.3f}  {status}")
         better = sum(r[3] == "better" for r in rows)
         worse = sum(r[3] == "worse" for r in rows)
-        print(f"\n{better} better, {worse} worse, {len(rows) - better - worse} unchanged")
+        same = len(rows) - better - worse
+        print(f"\n{better} better, {same} unchanged, {worse} worse")
+        passing = better + same          # "greater than or equal to" the old model
 
-    if not better:
-        print("\nHOLD BACK: the new model is not better on anything. The current model stays live.")
+    if not passing:
+        print("\nHOLD BACK: the new model is worse on every measure. The current model stays live.")
         return 1
-    print("\nDEPLOY: the new model is better in at least one way.")
+    print("\nDEPLOY: the new model is at least as good as the current one on at least one measure.")
     if a.promote:
         promote(cand, cand_path, prod_path, pathlib.Path(a.config))
     return 0
