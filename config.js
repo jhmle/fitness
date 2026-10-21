@@ -6,16 +6,7 @@ export const MEDIAPIPE_VERSIONS = ["0.10.14", "0.10.22", "0.10.3"];
 export const VAD_URL = "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.24/dist/";   // Silero VAD
 export const ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/";
 export const MOONSHINE_ID = "onnx-community/moonshine-tiny-ONNX";
-export const LLM_ID = "HuggingFaceTB/SmolLM2-360M-Instruct";   // PRODUCTION coach brain. training/gate.py checks this exact line against metrics/production.json
-export const TUNED_ID = "jhmle/trainer-coach-smollm2-360m-onnx";   // fine-tuned candidate (ONNX export of the merged QLoRA model on Hugging Face; the repo must be public)
-export const LLM_CHOICES = [{ id: TUNED_ID, label: "Fine-tuned (jhmle)" }];
-const okId = (v) => typeof v === "string" && /^[\w.-]+\/[\w.-]+$/.test(v);
-// Which model to load: ?llm=owner/repo in the URL, else the saved dropdown choice, else the production default.
-export function chosenLLM() {
-  try { const u = new URLSearchParams(location.search).get("llm"); if (okId(u)) return u; } catch {}
-  try { const v = localStorage.getItem("trainer.llm"); if (okId(v)) return v; } catch {}   // localStorage doesn't exist inside workers: caught
-  return LLM_ID;
-}
+export const LLM_ID = "jhmle/trainer-coach-smollm2-360m-onnx";   // the ONLY coach model: fine-tuned ONNX export on Hugging Face (repo must be public)
 export const EMBED_ID = "Xenova/all-MiniLM-L6-v2";             // knowledge-base search
 export const KOKORO_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 

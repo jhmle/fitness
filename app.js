@@ -1,4 +1,4 @@
-import { PROFILE, VAD_URL, ORT_URL, LLM_ID, LLM_CHOICES, chosenLLM } from "./config.js";
+import { PROFILE, VAD_URL, ORT_URL, LLM_ID } from "./config.js";
 import { loadPose, detect } from "./pose.js";
 import { RepEngine, SKELETON } from "./exercises.js";
 import { Agent, kbDocs } from "./agent.js";
@@ -16,13 +16,7 @@ let micStream = null;                                                       // m
 const engine = new RepEngine("squat");
 const PTS = [...new Set(SKELETON.flat())];
 
-if (!llmW) { $("lLabel").hidden = true; $("policy").parentElement.hidden = true; $("mLabel").hidden = true; $("modelNote").hidden = true; }
-else {                                                                       // coach-model picker: stock vs the fine-tuned Hugging Face model
-  const cur = chosenLLM(), opts = LLM_CHOICES.some((c) => c.id === cur) ? LLM_CHOICES : [...LLM_CHOICES, { id: cur, label: cur }];
-  $("llmModel").innerHTML = opts.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
-  $("llmModel").value = cur;
-  $("llmModel").onchange = () => { try { localStorage.setItem("trainer.llm", $("llmModel").value); } catch {} if (ready) $("modelNote").textContent = "Reload the page to switch the coach model."; };
-}
+if (!llmW) { $("lLabel").hidden = true; $("policy").parentElement.hidden = true; $("modelNote").hidden = true; }
 if (!kokoro) { $("kLabel").hidden = true; $("voice").parentElement.hidden = true; }
 
 // ---------------------------------------------------------------- states (what the stage shows)
@@ -61,7 +55,7 @@ $("load").onclick = async () => {
   $("load").disabled = true; setStatus("Downloading models…", "loading");
   moon.postMessage({ type: "load" });
   if (kokoro) kokoro.postMessage({ type: "load" });
-  if (llmW) { $("llmModel").disabled = true; llmW.postMessage({ type: "load", kb: kbDocs(), model: $("llmModel").value }); }
+  if (llmW) { llmW.postMessage({ type: "load", kb: kbDocs() }); }
   try {
     const info = await loadPose(); $("pp").value = 60; $("diag").textContent = "pose: " + info;
     try { await loadScript(ORT_URL + "ort.wasm.min.js"); await loadScript(VAD_URL + "bundle.min.js"); }
@@ -142,7 +136,7 @@ if (llmW) llmW.onmessage = ({ data: d }) => {
   else if (d.type === "warn") { console.warn(d.message); $("diag").textContent = d.message; }
   else if (d.type === "ready") {
     llmOK = d.llm; embOK = d.emb; llmModel = d.model; $("pl").value = 100;
-    $("modelNote").textContent = d.llm ? "Coach brain: " + d.model + " [" + d.run + "]" + (d.model !== $("llmModel").value ? " (fallback: the selected model failed to load)" : "") : "Coach brain: NOT loaded, rules only. " + (d.why || "");
+    $("modelNote").textContent = d.llm ? "Coach brain: " + d.model + " [" + d.run + "]" : "Coach brain: NOT loaded, rules only. " + (d.why || "");
     llmDone();
   }
   else if (d.type === "result") { pend.get(d.id)?.(d); pend.delete(d.id); }
@@ -306,7 +300,7 @@ setState("off");
 
 $("dl").onclick = () => {                           // session trace = future training / eval data
   const a = document.createElement("a");
-  const meta = { meta: { model: llmModel, selected: llmW ? $("llmModel").value : null, default_model: LLM_ID, profile: PROFILE.name, saved: new Date().toISOString() } };   // entries without "state" are ignored by gen_data.py --logs
+  const meta = { meta: { model: llmModel, default_model: LLM_ID, profile: PROFILE.name, saved: new Date().toISOString() } };   // entries without "state" are ignored by gen_data.py --logs
   a.href = URL.createObjectURL(new Blob([JSON.stringify([meta, ...agent.log], null, 1)], { type: "application/json" }));
   a.download = "trainer-session.json"; a.click(); URL.revokeObjectURL(a.href);
 };
