@@ -2,7 +2,7 @@
 
 **A personal trainer that runs entirely in your browser.** It watches you through your webcam, counts your reps, checks your form, and coaches you out loud. No account, no server, and no video ever leaves your device.
 
-### 🔗 [Try the live demo](https://jhmle.github.io/fitness/)
+### 🔗 [Try the live demo (laptop or desktop only)](https://jhmle.github.io/fitness/)
 
 > **Heads up: the AI runs on your own device, so the demo may not work on yours.** All the models run locally in your browser (about 250 MB, downloaded once).
 > - **Best on:** a laptop or desktop with a webcam, a microphone and plenty of free RAM.
