@@ -7,7 +7,7 @@
 > **Heads up: the AI runs on your own device, so the demo may not work on yours.** All the models run locally in your browser (about 250 MB, downloaded once).
 > - **Best on:** a laptop or desktop with a webcam, a microphone and plenty of free RAM.
 > - ⚠️ **Not recommended on phones or tablets:** they will likely run out of memory and crash or reload.
-> - If the voice is slow or missing, switch on **⚡ Fast voice** (uses your browser's built-in voice instead of Kokoro).
+> - If the voice is slow or missing, switch on Fast voice (uses your browser's built-in voice instead of Kokoro).
 
 ## What it does
 
