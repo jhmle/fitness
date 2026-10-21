@@ -2,15 +2,13 @@
 
 **A personal trainer that runs entirely in your browser.** It watches you through your webcam, counts your reps, checks your form, and coaches you out loud. No account, no server, and no video ever leaves your device.
 
-## What it does
-
-<table>
-  <tr><td>🔢</td><td><b>Counts reps and sets</b></td></tr>
-  <tr><td>✅</td><td><b>Checks your form</b></td></tr>
-  <tr><td>🗣️</td><td><b>Talks to you</b></td></tr>
-  <tr><td>🎧</td><td><b>Listens to you</b></td></tr>
-  <tr><td>🔒</td><td><b>Private by design</b></td></tr>
-</table>
+<p align="center">
+  🔢 <b>Counts reps and sets</b> &nbsp;·&nbsp;
+  ✅ <b>Checks your form</b> &nbsp;·&nbsp;
+  🗣️ <b>Talks to you</b> &nbsp;·&nbsp;
+  🎧 <b>Listens to you</b> &nbsp;·&nbsp;
+  🔒 <b>Private by design</b>
+</p>
 
 ## Try it
 
