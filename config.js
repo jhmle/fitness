@@ -14,7 +14,10 @@ const pose = (v) => `https://storage.googleapis.com/mediapipe-models/pose_landma
 const ipadOS = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;   // iPadOS Safari pretends to be a Mac
 const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || ipadOS || (navigator.deviceMemory || 8) <= 4;
 
+// Desktop Safari: Kokoro (WASM) never finishes a sentence there, so use the system voice instead.
+const safari = /^((?!chrome|chromium|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
+
 // Device profiles: desktop gets the fuller pose model + Kokoro; mobile gets lite pose + the browser's built-in voice.
 export const PROFILE = mobile
   ? { name: "mobile", pose: pose("lite"), tts: "browser", llm: false }
-  : { name: "desktop", pose: pose("full"), tts: "kokoro", llm: true };
+  : { name: "desktop", pose: pose("full"), tts: safari ? "browser" : "kokoro", llm: true };

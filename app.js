@@ -308,8 +308,9 @@ async function openMic() {
     for (const d of devs) { try { return await gum({ audio: { deviceId: { exact: d.deviceId } } }); } catch (e) { err = e; } }
     if (round === 0) await new Promise((r) => setTimeout(r, 500));   // an input that is still waking up (Bluetooth, USB, a device switch) often appears a moment later
   }
-  const n = (await navigator.mediaDevices.enumerateDevices().catch(() => [])).filter((d) => d.kind === "audioinput").length;
-  const e = new Error(`${err?.name}: ${err?.message} (audio inputs found: ${n})`); e.name = err?.name; throw e;
+  const devs = (await navigator.mediaDevices.enumerateDevices().catch(() => [])).filter((d) => d.kind === "audioinput");
+  const names = devs.map((d) => d.label || "unnamed").join(", ");
+  const e = new Error(`${err?.name}: ${err?.message} (audio inputs found: ${devs.length}${names ? " - " + names : ""})`); e.name = err?.name; throw e;
 }
 function micHint(e) {
   const n = e?.name;
@@ -377,6 +378,9 @@ async function begin() {
       stream = new MediaStream(both.getVideoTracks());
       if (both.getAudioTracks().length) mic = new MediaStream(both.getAudioTracks());
     } catch {}
+  }
+  if (!stream && !mic && $("voiceOn").checked) {                // combined request failed: try the mic on its own, before the camera opens
+    try { mic = await gum({ audio: MIC_FLAGS }); } catch {}
   }
   if (!stream) {
     try { stream = await gum({ video, audio: false }); }
