@@ -26,6 +26,14 @@ Camera → Pose tracking → Rep counter + form rules → AI coach → Voice
 
 Normal reps get an instant, rule-based response. The language model only steps in when something needs judgment: a form error, the end of a set, or a spoken question. If the model ever gives an unusable answer, the app falls back to the rules, so the coach always responds.
 
+## Try it
+
+```bash
+cd fitness
+python -m http.server 8000
+```
+
+Open http://localhost:8000 in desktop Chrome or Edge, click **Load models**, then **Start session**. Stand side-on to the camera with your whole body in view.
 
 ---
 
