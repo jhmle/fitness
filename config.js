@@ -11,7 +11,8 @@ export const EMBED_ID = "Xenova/all-MiniLM-L6-v2";             // knowledge-base
 export const KOKORO_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 
 const pose = (v) => `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${v}/float16/1/pose_landmarker_${v}.task`;
-const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.deviceMemory || 8) <= 4;
+const ipadOS = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;   // iPadOS Safari pretends to be a Mac
+const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || ipadOS || (navigator.deviceMemory || 8) <= 4;
 
 // Device profiles: desktop gets the fuller pose model + Kokoro; mobile gets lite pose + the browser's built-in voice.
 export const PROFILE = mobile

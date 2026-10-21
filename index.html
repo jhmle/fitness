@@ -43,6 +43,7 @@
     <div class="hud"><div><small>Reps</small><span id="repN">0</span></div><div><small>Set</small><span id="setN">1</span></div></div>
     <div class="center">
       <div class="turn" id="turn"><span class="turn-dot"></span><span id="turnText">Not started</span></div>
+      <canvas id="wave" class="wave" width="640" height="104" aria-hidden="true"></canvas>
       <div class="orb" id="orb" aria-hidden="true"><i></i><i></i><i></i><b></b></div>
       <h2 id="title">Ready when you are</h2>
       <p id="hint">Load the models, then start a session.</p>
@@ -54,6 +55,9 @@
     <button id="mic" class="btn btn-go" disabled><span class="ico"></span><span id="micLabel">Start session</span></button>
     <button id="skip" class="btn" disabled>Skip cue</button>
   </div>
+
+  <div id="micNote" class="note" role="alert" hidden><span></span><button id="retryMic" class="btn" type="button">Retry microphone</button></div>
+  <p id="audioNote" class="note" role="alert" hidden><span></span></p>
 
   <div class="options">
     <label class="inline"><span>Exercise</span>
