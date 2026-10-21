@@ -16,13 +16,12 @@ async function handle({ data }) {
         progress_callback: (p) => p.status === "progress" && post({ type: "progress", file: p.file, pct: p.progress }),
       });
       const voices = Object.keys(tts.voices);
-      // Warm-up: the first generation pays for one-off setup (phonemizer + WASM compile), which is slow in Safari.
-      // Doing it now, with nothing else competing, means the first coaching cue is fast, and tells us if Kokoro runs at all.
+      post({ type: "ready", voices });                 // ready NOW: never make the page wait for the warm-up
+      // Warm-up in the background: the first generation pays for one-off setup (phonemizer + WASM compile), slow in Safari.
+      // The page uses the browser voice until this finishes, so a slow or hanging first run can't block anything.
       log("Kokoro: warming up (first sentence is the slow one)…");
-      let warm = 0, why = "";
-      try { warm = (await withTimeout(gen("Ready.", voices.includes("af_heart") ? "af_heart" : voices[0]), 90000, "Kokoro warm-up")).ms; }
-      catch (e) { why = String(e.message || e); }
-      post({ type: "ready", voices, warm, bad: !!why, why });
+      try { post({ type: "warm", ms: (await withTimeout(gen("Ready.", voices.includes("af_heart") ? "af_heart" : voices[0]), 90000, "Kokoro warm-up")).ms }); }
+      catch (e) { post({ type: "warm", bad: true, why: String(e.message || e) }); }
     } else if (data.type === "speak") {
       const { out, ms } = await gen(data.text, data.voice);
       post({ type: "audio", id: data.id, samples: out.audio, rate: out.sampling_rate, ms }, [out.audio.buffer]);

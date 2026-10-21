@@ -78,7 +78,7 @@ moon.onmessage = async ({ data: d }) => {
 // ---------------------------------------------------------------- speech out (Kokoro on desktop, browser voice on mobile / as fallback)
 const AC = window.AudioContext || window.webkitAudioContext;
 let actx, analyser, nextT = 0, sources = [], lastSay = "", kT = 0, fbEpoch = -1;
-let kokoroBad = false, kLast = 0, kWarm = 0, kMiss = 0, speakingWith = "kokoro";
+let kokoroBad = false, kLast = 0, kWarm = 0, kMiss = 0, speakingWith = "kokoro", kWarming = false;
 const utts = new Set();                          // keep references: Safari can garbage-collect an utterance before it finishes
 // Persistent, visible messages. (The status pill is overwritten on every state change, so errors used to vanish.)
 function note(id, text) { const el = $(id); el.hidden = !text; (el.querySelector("span") || el).textContent = text || ""; if (text) $("diag").textContent = text; }
@@ -159,11 +159,11 @@ function say(text, { urgent = false } = {}) {
     }, limit);
   } else browserSpeak(text, e);
 }
-function useBrowserVoice() { return !kokoro || $("fastVoice").checked || kokoroBad; }
+function useBrowserVoice() { return !kokoro || $("fastVoice").checked || kokoroBad || kWarming; }
 function syncVoiceUI() {
   const fast = useBrowserVoice();
   $("voice").disabled = fast;
-  $("voiceEngine").textContent = "Speaking with: " + (fast ? "browser voice (fast)" : "Kokoro" + (kLast ? ` (about ${(kLast / 1000).toFixed(1)}s to generate a reply)` : ""));
+  $("voiceEngine").textContent = "Speaking with: " + (kWarming && !$("fastVoice").checked && !kokoroBad ? "browser voice while Kokoro warms up…" : fast ? "browser voice (fast)" : "Kokoro" + (kLast ? ` (about ${(kLast / 1000).toFixed(1)}s to generate a reply)` : ""));
 }
 kokoro && (kokoro.onmessage = ({ data: d }) => {
   if (d.type === "progress") $("pk").value = d.pct;
@@ -171,10 +171,14 @@ kokoro && (kokoro.onmessage = ({ data: d }) => {
   else if (d.type === "ready") {
     $("voice").innerHTML = d.voices.map((v) => `<option>${v}</option>`).join("");
     $("voice").value = d.voices.includes("af_heart") ? "af_heart" : d.voices[0];
-    kWarm = d.warm || 0;
-    if (d.bad) { kokoroBad = true; note("audioNote", "Kokoro isn't responding in this browser (" + d.why + "). Using the browser voice."); }
-    else $("diag").textContent = `Kokoro ready. First sentence took ${(kWarm / 1000).toFixed(1)}s.`;
+    kWarming = true;                                      // cues use the browser voice until Kokoro finishes warming up
     syncVoiceUI(); onReady();
+  }
+  else if (d.type === "warm") {
+    kWarming = false;
+    if (d.bad) { kokoroBad = true; note("audioNote", "Kokoro isn't responding in this browser (" + d.why + "). Using the browser voice."); }
+    else { kWarm = d.ms; $("diag").textContent = `Kokoro ready. First sentence took ${(d.ms / 1000).toFixed(1)}s.`; }
+    syncVoiceUI();
   }
   else if (d.type === "audio") { clearTimeout(kT); kMiss = 0; kLast = d.ms || kLast; syncVoiceUI(); if (d.id === epoch && d.id !== fbEpoch) play(d.samples, d.rate, d.id); }
   else if (d.type === "error") {
