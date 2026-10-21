@@ -24,6 +24,21 @@ const PTS = [...new Set(SKELETON.flat())];
 if (!llmW) { $("lLabel").hidden = true; $("policy").parentElement.hidden = true; $("modelNote").hidden = true; }
 if (!kokoro) { $("kLabel").hidden = true; $("voice").parentElement.hidden = true; $("fastWrap").hidden = true; }
 
+// ---------------------------------------------------------------- device warnings (shown before anything is downloaded)
+const BUSY = "trainer.busy";                       // set while models are loaded / a session is running; cleared on a clean page close
+(() => {
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const gb = navigator.deviceMemory;               // Chrome/Android only, capped at 8
+  const lowRam = gb && gb <= 4;
+  if (PROFILE.name === "mobile" || lowRam) {
+    const why = ios ? "iPhones and iPads give a web page only a small slice of memory" : lowRam ? `this device reports only about ${gb} GB of memory` : "phones have limited memory";
+    const el = $("deviceWarn"); el.hidden = false;
+    el.querySelector("span").textContent = `Heads up: this app runs AI models on your device, and ${why}, so it may crash or reload without warning. For a reliable session, use a stronger device with more RAM, such as a recent laptop or desktop.`;
+  }
+  try { if (localStorage.getItem(BUSY)) { const m = $("memNote"); m.hidden = false; m.querySelector("span").textContent = "The app closed unexpectedly last time, which usually means the device ran out of memory. Switch to a stronger device with more RAM for a reliable session."; localStorage.removeItem(BUSY); } } catch {}
+  addEventListener("pagehide", () => { try { localStorage.removeItem(BUSY); } catch {} });   // a crash never fires this, a normal close does
+})();
+
 // ---------------------------------------------------------------- states (what the stage shows)
 const STATES = {
   off:       ["Not started", "Ready when you are", "Start a session and set the camera so your whole body is in view."],
@@ -66,6 +81,7 @@ function loadScript(src) {
   return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("failed to load " + src)); document.head.append(s); });
 }
 $("load").onclick = async () => {
+  try { localStorage.setItem(BUSY, "1"); } catch {}
   $("load").disabled = true; setStatus("Downloading models…", "loading");
   moon.postMessage({ type: "load" });
   if (kokoro) { kokoro.postMessage({ type: "load", strict: KOKORO_STRICT }); kBump(); }
