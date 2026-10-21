@@ -143,3 +143,9 @@ pre#diag { margin: 6px 0 0; padding: 12px; background: #f3f5fa; border: 1px soli
 @media (max-width: 700px) { .stage { min-height: 380px; } }
 
 .load-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+
+/* ---------- voice waves: live bars while the coach is speaking ---------- */
+.waves { display: none; align-items: center; justify-content: center; gap: 4px; height: 56px; width: min(320px, 80%); }
+.stage[data-state="speaking"] .waves { display: flex; }
+.waves i { flex: 1; max-width: 8px; height: 100%; border-radius: 4px; background: #fff; opacity: .92; transform: scaleY(.08); transition: transform .06s linear; box-shadow: 0 0 12px var(--c); }
+.stage.cam .waves { height: 44px; }
