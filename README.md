@@ -4,11 +4,13 @@
 
 ## What it does
 
-- **Counts reps and sets** 
-- **Checks your form** 
-- **Talks to you** 
-- **Listens to you**
-- **Private by design** 
+| | |
+|---|---|
+| 🔢 | **Counts reps and sets** |
+| ✅ | **Checks your form** |
+| 🗣️ | **Talks to you** |
+| 🎧 | **Listens to you** |
+| 🔒 | **Private by design** |
 
 ## Try it
 
