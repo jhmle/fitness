@@ -2,9 +2,7 @@
 
 **A personal trainer that runs entirely in your browser.** It watches you through your webcam, counts your reps, checks your form, and coaches you out loud. No account, no server, and no video ever leaves your device.
 
-<p align="center">
-  <img src="assets/tracking.png" alt="AI Trainer tracking a workout" width="720">
-</p>
+
 
 ## What it does
 
