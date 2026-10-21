@@ -31,7 +31,6 @@
       <label class="meter"><span>Moonshine (hears you)</span><progress id="pm" max="100" value="0"></progress></label>
       <label class="meter" id="kLabel"><span>Kokoro (speaks)</span><progress id="pk" max="100" value="0"></progress></label>
       <label class="meter" id="lLabel"><span>Coach brain (LLM + search)</span><progress id="pl" max="100" value="0"></progress></label>
-      <label class="meter" id="mLabel"><span>Coach model</span><select id="llmModel"></select></label>
       <button id="load" class="btn btn-primary">Load models</button>
     </div>
     <p id="modelNote" class="small muted" style="margin:12px 0 0"></p>
@@ -45,7 +44,6 @@
     <div class="center">
       <div class="turn" id="turn"><span class="turn-dot"></span><span id="turnText">Not started</span></div>
       <div class="orb" id="orb" aria-hidden="true"><i></i><i></i><i></i><b></b></div>
-      <div class="waves" id="waves" aria-hidden="true"></div>
       <h2 id="title">Ready when you are</h2>
       <p id="hint">Load the models, then start a session.</p>
       <div id="cueOut" class="out" aria-live="polite"></div>

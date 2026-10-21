@@ -1,4 +1,4 @@
-import { PROFILE, VAD_URL, ORT_URL, LLM_ID, LLM_CHOICES, chosenLLM } from "./config.js";
+import { PROFILE, VAD_URL, ORT_URL, LLM_ID } from "./config.js";
 import { loadPose, detect } from "./pose.js";
 import { RepEngine, SKELETON } from "./exercises.js";
 import { Agent, kbDocs } from "./agent.js";
@@ -16,13 +16,7 @@ let micStream = null;                                                       // m
 const engine = new RepEngine("squat");
 const PTS = [...new Set(SKELETON.flat())];
 
-if (!llmW) { $("lLabel").hidden = true; $("policy").parentElement.hidden = true; $("mLabel").hidden = true; $("modelNote").hidden = true; }
-else {                                                                       // coach-model picker: stock vs the fine-tuned Hugging Face model
-  const cur = chosenLLM(), opts = LLM_CHOICES.some((c) => c.id === cur) ? LLM_CHOICES : [...LLM_CHOICES, { id: cur, label: cur }];
-  $("llmModel").innerHTML = opts.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
-  $("llmModel").value = cur;
-  $("llmModel").onchange = () => { try { localStorage.setItem("trainer.llm", $("llmModel").value); } catch {} if (ready) $("modelNote").textContent = "Reload the page to switch the coach model."; };
-}
+if (!llmW) { $("lLabel").hidden = true; $("policy").parentElement.hidden = true; $("modelNote").hidden = true; }
 if (!kokoro) { $("kLabel").hidden = true; $("voice").parentElement.hidden = true; }
 
 // ---------------------------------------------------------------- states (what the stage shows)
@@ -61,7 +55,7 @@ $("load").onclick = async () => {
   $("load").disabled = true; setStatus("Downloading models…", "loading");
   moon.postMessage({ type: "load" });
   if (kokoro) kokoro.postMessage({ type: "load" });
-  if (llmW) { $("llmModel").disabled = true; llmW.postMessage({ type: "load", kb: kbDocs(), model: $("llmModel").value }); }
+  if (llmW) { llmW.postMessage({ type: "load", kb: kbDocs() }); }
   try {
     const info = await loadPose(); $("pp").value = 60; $("diag").textContent = "pose: " + info;
     try { await loadScript(ORT_URL + "ort.wasm.min.js"); await loadScript(VAD_URL + "bundle.min.js"); }
@@ -82,40 +76,17 @@ moon.onmessage = async ({ data: d }) => {
 };
 
 // ---------------------------------------------------------------- speech out (Kokoro on desktop, browser voice on mobile)
-let actx, an, nextT = 0, sources = [], lastSay = "", bvActive = false;
-function getCtx() {
-  if (!actx) {
-    actx = new (window.AudioContext || window.webkitAudioContext)();
-    an = actx.createAnalyser(); an.fftSize = 128; an.smoothingTimeConstant = 0.6; an.connect(actx.destination);   // the analyser also feeds the speaking waves
-    actx.onstatechange = () => { if (actx.state !== "running" && S) actx.resume().catch(() => {}); };         // Safari suspends output when the mic opens
-  }
-  return actx;
-}
-function unlockAudio() {          // call synchronously inside a click: Safari only lets a context make sound after it played something from a gesture
-  const c = getCtx(); c.resume().catch(() => {});
-  try { const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); } catch {}
-}
-async function ensureAudio() {    // true if sound can really come out right now
-  const c = getCtx();
-  if (c.state !== "running") { try { await Promise.race([c.resume(), new Promise((r) => setTimeout(r, 600))]); } catch {} }
-  return c.state === "running";
-}
-function browserSpeak(text) {     // the built-in voice: used when Kokoro or Web Audio can't make sound
-  const e = epoch; bvActive = true;
-  const u = new SpeechSynthesisUtterance(text);
-  u.onend = u.onerror = () => { if (e === epoch) { bvActive = false; done(); } };
-  speechSynthesis.speak(u);
-}
+let actx, nextT = 0, sources = [], lastSay = "";
 function play(samples, rate) {
-  const c = getCtx();
-  const b = c.createBuffer(1, samples.length, rate); b.copyToChannel(samples, 0);
-  const s = c.createBufferSource(); s.buffer = b; s.connect(an);
-  nextT = Math.max(nextT, c.currentTime + 0.05); s.start(nextT); nextT += b.duration;
+  actx ??= new AudioContext(); if (actx.state === "suspended") actx.resume();
+  const b = actx.createBuffer(1, samples.length, rate); b.copyToChannel(samples, 0);
+  const s = actx.createBufferSource(); s.buffer = b; s.connect(actx.destination);
+  nextT = Math.max(nextT, actx.currentTime + 0.05); s.start(nextT); nextT += b.duration;
   sources.push(s);
   s.onended = () => { sources = sources.filter((x) => x !== s); done(); };
 }
 function stopSpeech() {
-  epoch++; busyTTS = 0; nextT = 0; bvActive = false;
+  epoch++; busyTTS = 0; nextT = 0;
   sources.forEach((s) => { s.onended = null; try { s.stop(); } catch {} }); sources = [];
   speechSynthesis.cancel();
 }
@@ -131,7 +102,7 @@ function say(text, { urgent = false } = {}) {
   lastSay = text; busyTTS++; setState("speaking");
   { const e = epoch; setTimeout(() => { if (e === epoch && busyTTS && S) { busyTTS = 0; setState("listening"); } }, 20000); }   // never stay deaf if audio fails to finish
   if (kokoro) kokoro.postMessage({ type: "speak", text, voice: $("voice").value, id: epoch });
-  else browserSpeak(text);
+  else { const e = epoch, u = new SpeechSynthesisUtterance(text); u.onend = u.onerror = () => e === epoch && done(); speechSynthesis.speak(u); }
 }
 kokoro && (kokoro.onmessage = ({ data: d }) => {
   if (d.type === "progress") $("pk").value = d.pct;
@@ -140,40 +111,15 @@ kokoro && (kokoro.onmessage = ({ data: d }) => {
     $("voice").value = d.voices.includes("af_heart") ? "af_heart" : d.voices[0];
     onReady();
   }
-  else if (d.type === "audio") {
-    if (d.id === epoch) ensureAudio().then((ok) => {
-      if (d.id !== epoch) return;
-      if (ok) play(d.samples, d.rate);
-      else { $("diag").textContent = "Audio output is blocked (" + actx.state + "), using the browser voice"; browserSpeak(lastSay); }
-    });
-  }
+  else if (d.type === "audio") { if (d.id === epoch) play(d.samples, d.rate); }
   else if (d.type === "error") {
     if (d.id === epoch) {                                       // Kokoro failed: fall back to the browser voice so the reply is still spoken
-      if (lastSay) browserSpeak(lastSay); else done();
+      if (lastSay) { const e = epoch, u = new SpeechSynthesisUtterance(lastSay); u.onend = u.onerror = () => e === epoch && done(); speechSynthesis.speak(u); } else done();
     }
     fail(d, "Kokoro");
   }
 });
 $("skip").onclick = () => { stopSpeech(); if (S) setState("listening"); };
-
-// ---------------------------------------------------------------- voice waves (shown while the coach speaks)
-const wavesEl = $("waves"), BARS = 28, fd = new Uint8Array(64);
-if (wavesEl) wavesEl.innerHTML = "<i></i>".repeat(BARS);
-const bars = wavesEl ? [...wavesEl.children] : [];
-function waveLoop(t) {
-  requestAnimationFrame(waveLoop);
-  if (state !== "speaking" || !bars.length) return;
-  let live = false;
-  if (an) { an.getByteFrequencyData(fd); for (let i = 0; i < fd.length; i++) if (fd[i] > 2) { live = true; break; } }
-  for (let i = 0; i < BARS; i++) {
-    const d = Math.abs(i - (BARS - 1) / 2), k = d / ((BARS - 1) / 2);            // 0 at the centre, 1 at the edges
-    let v = 0;
-    if (live) v = (fd[Math.min(fd.length - 1, 1 + Math.floor(d * 0.75))] / 255) * 1.5;   // mirrored spectrum, bass in the middle
-    else if (bvActive) v = (0.25 + 0.5 * Math.abs(Math.sin(t / 170 + i * 0.6))) * (1 - k * 0.5);   // built-in voice gives no audio to analyse
-    bars[i].style.transform = `scaleY(${(0.08 + Math.min(1, v) * 0.92).toFixed(3)})`;
-  }
-}
-requestAnimationFrame(waveLoop);
 
 // ---------------------------------------------------------------- coach brain worker (LLM + embeddings)
 const pend = new Map(); let rid = 0, llmOK = false, embOK = false, llmCounted = false;
@@ -190,7 +136,7 @@ if (llmW) llmW.onmessage = ({ data: d }) => {
   else if (d.type === "warn") { console.warn(d.message); $("diag").textContent = d.message; }
   else if (d.type === "ready") {
     llmOK = d.llm; embOK = d.emb; llmModel = d.model; $("pl").value = 100;
-    $("modelNote").textContent = d.llm ? "Coach brain: " + d.model + " [" + d.run + "]" + (d.model !== $("llmModel").value ? " (fallback: the selected model failed to load)" : "") : "Coach brain: NOT loaded, rules only. " + (d.why || "");
+    $("modelNote").textContent = d.llm ? "Coach brain: " + d.model + " [" + d.run + "]" : "Coach brain: NOT loaded, rules only. " + (d.why || "");
     llmDone();
   }
   else if (d.type === "result") { pend.get(d.id)?.(d); pend.delete(d.id); }
@@ -288,8 +234,6 @@ async function openMic() {
     if (!d.deviceId) continue;
     try { return await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: d.deviceId } } }); } catch (e) { err = e; }
   }
-  await new Promise((r) => setTimeout(r, 400));                 // Safari sometimes needs a moment after the camera opens
-  try { return await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { err = e; }
   throw new Error(`${err?.name}: ${err?.message} (audio inputs found: ${devs.length})`);
 }
 
@@ -297,24 +241,18 @@ async function openMic() {
 async function begin() {
   if (S || starting || ready < need) return;
   starting = true; refresh(); stopSpeech();
-  unlockAudio();                                                // unlock sound output inside the click so replies can always play (Safari needs this)
-  let stream, lastErr;
-  const vid = { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } };
-  const mc = { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true };
-  // ONE request for camera + mic: Safari often refuses a separate mic request after the camera is open (NotFoundError).
-  for (const audio of $("voiceOn").checked ? [mc, true, false] : [false]) {
-    try { stream = await navigator.mediaDevices.getUserMedia({ video: vid, audio }); break; } catch (e) { lastErr = e; }
-  }
-  if (!stream) { starting = false; refresh(); return setStatus("Camera access failed: " + (lastErr?.message || lastErr), "error"); }
-  const micTracks = stream.getAudioTracks();
-  const v = $("cam"); v.srcObject = new MediaStream(stream.getVideoTracks()); try { await v.play(); } catch {}
+  actx ??= new AudioContext(); actx.resume().catch(() => {});   // unlock audio output inside the click so replies can always play
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false }); }
+  catch (e) { starting = false; refresh(); return setStatus("Camera access failed: " + e.message, "error"); }
+  const v = $("cam"); v.srcObject = stream; try { await v.play(); } catch {}
   $("stage").classList.add("cam");
   S = { stream, t: -1, flash: null, warn: false, raf: 0 };
   engine.set($("ex").value); agent.ex = $("ex").value; paused = false;
   let voiceErr = "";
   if ($("voiceOn").checked) {
     try {
-      micStream = micTracks.length ? new MediaStream(micTracks) : await openMic();
+      micStream = await openMic();
       vad = await window.vad.MicVAD.new({                       // Silero VAD: only wake Moonshine on real speech
         baseAssetPath: VAD_URL, onnxWASMBasePath: ORT_URL,
         positiveSpeechThreshold: 0.4, negativeSpeechThreshold: 0.25,   // easier to trigger on quiet or distant speech
@@ -339,10 +277,7 @@ async function begin() {
         },
       });
       vad.start();
-    } catch (e) {
-      const m = String(e.message || e);
-      voiceErr = "Voice commands unavailable: " + m + (/NotFound/i.test(m) ? ". Check that a microphone is selected in System Settings > Sound > Input, and that this site is allowed in Safari > Settings > Websites > Microphone." : "");
-    }
+    } catch (e) { voiceErr = "Voice commands unavailable: " + (e.message || e); }
   }
   starting = false;
   $("mic").classList.add("on"); $("micLabel").textContent = "End session";
@@ -365,7 +300,7 @@ setState("off");
 
 $("dl").onclick = () => {                           // session trace = future training / eval data
   const a = document.createElement("a");
-  const meta = { meta: { model: llmModel, selected: llmW ? $("llmModel").value : null, default_model: LLM_ID, profile: PROFILE.name, saved: new Date().toISOString() } };   // entries without "state" are ignored by gen_data.py --logs
+  const meta = { meta: { model: llmModel, default_model: LLM_ID, profile: PROFILE.name, saved: new Date().toISOString() } };   // entries without "state" are ignored by gen_data.py --logs
   a.href = URL.createObjectURL(new Blob([JSON.stringify([meta, ...agent.log], null, 1)], { type: "application/json" }));
   a.download = "trainer-session.json"; a.click(); URL.revokeObjectURL(a.href);
 };
