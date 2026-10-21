@@ -4,13 +4,13 @@
 
 ## What it does
 
-| | |
-|---|---|
-| 🔢 | **Counts reps and sets** |
-| ✅ | **Checks your form** |
-| 🗣️ | **Talks to you** |
-| 🎧 | **Listens to you** |
-| 🔒 | **Private by design** |
+<table>
+  <tr><td>🔢</td><td><b>Counts reps and sets</b></td></tr>
+  <tr><td>✅</td><td><b>Checks your form</b></td></tr>
+  <tr><td>🗣️</td><td><b>Talks to you</b></td></tr>
+  <tr><td>🎧</td><td><b>Listens to you</b></td></tr>
+  <tr><td>🔒</td><td><b>Private by design</b></td></tr>
+</table>
 
 ## Try it
 
