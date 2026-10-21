@@ -65,7 +65,9 @@
     <label class="switch"><input type="checkbox" id="speakOn" checked><span class="slider"></span><span>Speak cues</span></label>
     <label class="switch"><input type="checkbox" id="voiceOn" checked><span class="slider"></span><span>Voice commands</span></label>
     <label class="inline"><span>Coach</span><select id="policy"><option value="llm">LLM agent</option><option value="template">Rules only</option></select></label>
+    <label class="switch" id="fastWrap" title="Uses your device's built-in voice. Replies start speaking sooner, but it sounds more robotic than Kokoro."><input type="checkbox" id="fastVoice"><span class="slider"></span><span>⚡ Fast voice <small class="muted">(browser voice: speaks sooner, less natural)</small></span></label>
     <label class="inline"><span>Voice</span><select id="voice"></select></label>
+    <span id="voiceEngine" class="small muted voice-engine"></span>
   </div>
 
   <details class="card tools">

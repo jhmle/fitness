@@ -149,3 +149,6 @@ pre#diag { margin: 6px 0 0; padding: 12px; background: #f3f5fa; border: 1px soli
 .stage[data-state="speaking"] .wave, .stage[data-state="hearing"] .wave { display: block; }
 .note { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0 0; padding: 10px 14px; border-radius: 12px; background: var(--warn-soft); color: var(--warn); font-size: 14px; font-weight: 600; }
 .note .btn { padding: 6px 12px; font-size: 13px; }
+.switch small { font-weight: 500; }
+.voice-engine { flex-basis: 100%; margin-top: -4px; }
+select:disabled { opacity: .5; }

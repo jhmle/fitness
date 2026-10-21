@@ -17,7 +17,7 @@ const engine = new RepEngine("squat");
 const PTS = [...new Set(SKELETON.flat())];
 
 if (!llmW) { $("lLabel").hidden = true; $("policy").parentElement.hidden = true; $("modelNote").hidden = true; }
-if (!kokoro) { $("kLabel").hidden = true; $("voice").parentElement.hidden = true; }
+if (!kokoro) { $("kLabel").hidden = true; $("voice").parentElement.hidden = true; $("fastWrap").hidden = true; }
 
 // ---------------------------------------------------------------- states (what the stage shows)
 const STATES = {
@@ -78,6 +78,7 @@ moon.onmessage = async ({ data: d }) => {
 // ---------------------------------------------------------------- speech out (Kokoro on desktop, browser voice on mobile / as fallback)
 const AC = window.AudioContext || window.webkitAudioContext;
 let actx, analyser, nextT = 0, sources = [], lastSay = "", kT = 0, fbEpoch = -1;
+let kokoroBad = false, kLast = 0, kWarm = 0, kMiss = 0, speakingWith = "kokoro";
 const utts = new Set();                          // keep references: Safari can garbage-collect an utterance before it finishes
 // Persistent, visible messages. (The status pill is overwritten on every state change, so errors used to vanish.)
 function note(id, text) { const el = $(id); el.hidden = !text; (el.querySelector("span") || el).textContent = text || ""; if (text) $("diag").textContent = text; }
@@ -142,20 +143,40 @@ function say(text, { urgent = false } = {}) {
   lastSay = text; busyTTS++; setState("speaking");
   const e = epoch;
   setTimeout(() => { if (e === epoch && busyTTS && S) { busyTTS = 0; setState("listening"); } }, 20000);   // never stay deaf if audio fails to finish
-  if (kokoro) {
+  const fast = useBrowserVoice();
+  speakingWith = fast ? "browser" : "kokoro";
+  if (!fast) {
     kokoro.postMessage({ type: "speak", text, voice: $("voice").value, id: e });
-    clearTimeout(kT);                              // Kokoro silent for too long (Safari/WASM stalls): speak with the browser voice
-    kT = setTimeout(() => { if (e === epoch && busyTTS && !sources.length) { fbEpoch = e; note("audioNote", "Kokoro took too long, using the browser voice."); browserSpeak(text, e); } }, 15000);
+    clearTimeout(kT);                              // limit scales with how long Kokoro really takes on this device
+    const limit = Math.max(15000, (kLast || kWarm || 2500) * 6);
+    kT = setTimeout(() => {
+      if (e === epoch && busyTTS && !sources.length) {
+        fbEpoch = e;
+        if (++kMiss >= 2) { kokoroBad = true; syncVoiceUI(); note("audioNote", "Kokoro is too slow on this device, so I switched to the browser voice for this session."); }
+        else note("audioNote", `Kokoro took longer than ${Math.round(limit / 1000)}s, using the browser voice for this reply.`);
+        browserSpeak(text, e);
+      }
+    }, limit);
   } else browserSpeak(text, e);
+}
+function useBrowserVoice() { return !kokoro || $("fastVoice").checked || kokoroBad; }
+function syncVoiceUI() {
+  const fast = useBrowserVoice();
+  $("voice").disabled = fast;
+  $("voiceEngine").textContent = "Speaking with: " + (fast ? "browser voice (fast)" : "Kokoro" + (kLast ? ` (about ${(kLast / 1000).toFixed(1)}s to generate a reply)` : ""));
 }
 kokoro && (kokoro.onmessage = ({ data: d }) => {
   if (d.type === "progress") $("pk").value = d.pct;
+  else if (d.type === "log") { console.log(d.message); $("diag").textContent = d.message; }
   else if (d.type === "ready") {
     $("voice").innerHTML = d.voices.map((v) => `<option>${v}</option>`).join("");
     $("voice").value = d.voices.includes("af_heart") ? "af_heart" : d.voices[0];
-    onReady();
+    kWarm = d.warm || 0;
+    if (d.bad) { kokoroBad = true; note("audioNote", "Kokoro isn't responding in this browser (" + d.why + "). Using the browser voice."); }
+    else $("diag").textContent = `Kokoro ready. First sentence took ${(kWarm / 1000).toFixed(1)}s.`;
+    syncVoiceUI(); onReady();
   }
-  else if (d.type === "audio") { clearTimeout(kT); if (d.id === epoch && d.id !== fbEpoch) play(d.samples, d.rate, d.id); }
+  else if (d.type === "audio") { clearTimeout(kT); kMiss = 0; kLast = d.ms || kLast; syncVoiceUI(); if (d.id === epoch && d.id !== fbEpoch) play(d.samples, d.rate, d.id); }
   else if (d.type === "error") {
     clearTimeout(kT);
     const mine = d.id === epoch && d.id !== fbEpoch;
@@ -165,6 +186,12 @@ kokoro && (kokoro.onmessage = ({ data: d }) => {
   }
 });
 $("skip").onclick = () => { stopSpeech(); if (S) setState("listening"); };
+try { $("fastVoice").checked = localStorage.getItem("trainer.fastVoice") === "1"; } catch {}
+$("fastVoice").onchange = () => {
+  try { localStorage.setItem("trainer.fastVoice", $("fastVoice").checked ? "1" : "0"); } catch {}
+  stopSpeech(); if (S) setState("listening"); syncVoiceUI();
+};
+syncVoiceUI();
 
 // ---------------------------------------------------------------- voice waves (while the coach speaks, and while it hears you)
 const wave = $("wave"), wg = wave.getContext("2d");
@@ -175,7 +202,7 @@ function drawWave(t) {
   if (state !== "speaking" && state !== "hearing") return;
   const W = wave.width, H = wave.height, N = 37, step = W / N, bw = step * 0.55, mid = (N - 1) / 2, lv = [];
   let base = state === "hearing" ? micLevel : 0.55;      // the browser voice gives no audio to analyse, so it gets a simulated wave
-  if (state === "speaking" && kokoro) {
+  if (state === "speaking" && speakingWith === "kokoro") {
     if (analyser && sources.length) {                    // real audio: mirrored spectrum, loudest bins in the middle
       const d = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(d);
       const top = Math.floor(d.length * 0.6);
