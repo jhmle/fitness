@@ -4,11 +4,11 @@
 
 ## What it does
 
-- **Counts reps and sets** for squats, push-ups, and bicep curls using your camera
-- **Checks your form** (depth, posture, speed) and flags what to fix
-- **Talks to you** with short spoken cues like "Chest up" or "Go a bit deeper"
-- **Listens to you**, so you can say things like "30 seconds rest" or "switch to push-ups" hands-free
-- **Private by design:** every model runs locally on your device after a one-time download (~250 MB)
+- **Counts reps and sets** 
+- **Checks your form** 
+- **Talks to you** 
+- **Listens to you**
+- **Private by design:** 
 
 ## Try it
 
