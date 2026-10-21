@@ -1,0 +1,161 @@
+{
+ "metrics": {
+  "n": 600,
+  "valid_json_rate": 0.0,
+  "tool_acc": 0.0,
+  "action_acc": 0.0,
+  "advice_error_rate": 1.0,
+  "invalid_rate": 1.0,
+  "unsupported_cue_rate": 0.0,
+  "worded_cue_rate": 0.0,
+  "rephrase_rate": 0.0,
+  "rep_cue_action_acc": 0.0,
+  "rep_cue_valid_rate": 0.0,
+  "set_end_action_acc": 0.0,
+  "set_end_valid_rate": 0.0,
+  "voice_action_acc": 0.0,
+  "voice_valid_rate": 0.0
+ },
+ "tool_report": {
+  "give_cue": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 257.0
+  },
+  "adjust_plan": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 229.0
+  },
+  "retrieve_cues": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 25.0
+  },
+  "rest_timer": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 33.0
+  },
+  "start_exercise": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 27.0
+  },
+  "set_summary": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 29.0
+  },
+  "invalid": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 0.0
+  },
+  "accuracy": 0.0,
+  "macro avg": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 600.0
+  },
+  "weighted avg": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 600.0
+  }
+ },
+ "confusion": {
+  "labels": [
+   "give_cue",
+   "adjust_plan",
+   "retrieve_cues",
+   "rest_timer",
+   "start_exercise",
+   "set_summary",
+   "invalid"
+  ],
+  "matrix": [
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    257
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    229
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    25
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    33
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    27
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    29
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  ]
+ },
+ "name": "candidate",
+ "predictor": "hf",
+ "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+ "adapter": "out/adapter",
+ "n": 600,
+ "git_sha": "7a71b5a",
+ "test_sha": "7c3793912ebd925d",
+ "seconds": 166.1,
+ "onnx_model": "jhmle/trainer-coach-smollm2-360m-onnx-20261021-0947"
+}
