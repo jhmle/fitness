@@ -2,7 +2,14 @@
 
 **A personal trainer that runs entirely in your browser.** It watches you through your webcam, counts your reps, checks your form, and coaches you out loud. No account, no server, and no video ever leaves your device.
 
+<!-- Add a short demo GIF or video here, e.g. ![Demo](demo.gif). It always works, unlike the live app. -->
 
+### 🔗 [Try the live demo](https://jhmle.github.io/fitness/)
+
+> **Heads up: it runs on your device, so it may not work on yours.** All the AI models run locally in your browser (about 250 MB, downloaded once), so results depend on your hardware and browser.
+> - **Best on:** a laptop or desktop with a webcam and microphone, in a recent Chrome or Edge, with plenty of free RAM.
+> - **Less reliable:** Safari and Firefox may work but are less tested. Phones and tablets often run out of memory and can crash or reload, so they are not recommended.
+> - If the voice is slow or missing, switch on **⚡ Fast voice** (uses your browser's built-in voice instead of Kokoro).
 
 ## What it does
 
