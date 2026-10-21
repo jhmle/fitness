@@ -17,7 +17,7 @@ cd fitness
 python -m http.server 8000
 ```
 
-Open http://localhost:8000 , click **Load models**, then **Start session**.
+Open http://localhost:8000, click **Load models**, then **Start session**.
 
 ---
 
