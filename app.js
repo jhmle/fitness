@@ -13,6 +13,8 @@ const need = 2 + (kokoro ? 1 : 0) + (llmW ? 1 : 0);                       // pos
 let llmModel = null, ready = 0, starting = false, S = null, state = "off", vad = null, paused = false, busyTTS = 0, epoch = 0;
 let lastMeter = 0;
 let micStream = null;                                                       // mic stream we open ourselves and hand to the VAD
+for (const [w, name] of [[moon, "Moonshine"], [kokoro, "Kokoro"], [llmW, "Coach brain"]])   // a worker that dies (often out of memory) used to fail silently
+  if (w) w.onerror = (ev) => { ev.preventDefault?.(); fail(new Error(ev.message || "worker stopped unexpectedly"), name); memCheck(name, ev.message || "", !ev.message); };
 const engine = new RepEngine("squat");
 const PTS = [...new Set(SKELETON.flat())];
 
@@ -42,8 +44,17 @@ function refresh() {
 const hud = () => { $("repN").textContent = agent.reps.length + "/" + agent.target; $("setN").textContent = agent.set; };
 
 // ---------------------------------------------------------------- loading
+// Low-memory detection. WASM/ONNX out-of-memory shows up as allocation errors, bare numeric pointer codes, or a model that just stops answering.
+const looksLikeMemory = (m) => /out of memory|memory|alloc|\boom\b|bad_alloc/i.test(m) || /^\d{5,}$/.test(String(m).trim());
+function memCheck(who, msg = "", soft = false) {
+  const hard = looksLikeMemory(msg);
+  if (!hard && !soft) return;
+  const tail = "Switch to a more powerful device with more RAM (a recent laptop or desktop), or close other tabs and apps and reload. The coach still works with Fast voice and the Rules only coach.";
+  note("memNote", hard ? `Not enough memory: this device can't hold the on-device AI models (${who}). ${tail}`
+                       : `${who} stopped responding, which often means the device is running out of memory. If it keeps happening: ${tail[0].toLowerCase() + tail.slice(1)}`);
+}
 const fail = (e, who = "") => {                      // always say which component failed
-  const msg = String(e.message || e); console.error(who, e);
+  const msg = String(e.message || e); console.error(who, e); memCheck(who || "A model", msg);
   $("diag").textContent = who + ": " + msg;
   setStatus(`Error${who ? " (" + who + ")" : ""}: ` + msg.slice(0, 180), "error");
 };
@@ -152,7 +163,7 @@ function say(text, { urgent = false } = {}) {
     kT = setTimeout(() => {
       if (e === epoch && busyTTS && !sources.length) {
         fbEpoch = e;
-        if (++kMiss >= 2) { kokoroBad = true; syncVoiceUI(); note("audioNote", "Kokoro is too slow on this device, so I switched to the browser voice for this session."); }
+        if (++kMiss >= 2) { kokoroBad = true; syncVoiceUI(); note("audioNote", "Kokoro is too slow on this device, so I switched to the browser voice for this session."); memCheck("Kokoro", "", true); }
         else note("audioNote", `Kokoro took longer than ${Math.round(limit / 1000)}s, using the browser voice for this reply.`);
         browserSpeak(text, e);
       }
@@ -176,7 +187,7 @@ kokoro && (kokoro.onmessage = ({ data: d }) => {
   }
   else if (d.type === "warm") {
     kWarming = false;
-    if (d.bad) { kokoroBad = true; note("audioNote", "Kokoro isn't responding in this browser (" + d.why + "). Using the browser voice."); }
+    if (d.bad) { kokoroBad = true; note("audioNote", "Kokoro isn't responding in this browser (" + d.why + "). Using the browser voice."); memCheck("Kokoro", d.why, true); }
     else { kWarm = d.ms; $("diag").textContent = `Kokoro ready. First sentence took ${(d.ms / 1000).toFixed(1)}s.`; }
     syncVoiceUI();
   }
@@ -234,9 +245,9 @@ const llm = llmW && {
 };
 if (llmW) llmW.onmessage = ({ data: d }) => {
   if (d.type === "progress") $("pl").value = d.pct;
-  else if (d.type === "warn") { console.warn(d.message); $("diag").textContent = d.message; }
+  else if (d.type === "warn") { console.warn(d.message); $("diag").textContent = d.message; memCheck("Coach brain", d.message); }
   else if (d.type === "ready") {
-    llmOK = d.llm; embOK = d.emb; llmModel = d.model; $("pl").value = 100;
+    if (!d.llm) memCheck("Coach brain", d.why || ""); llmOK = d.llm; embOK = d.emb; llmModel = d.model; $("pl").value = 100;
     $("modelNote").textContent = d.llm ? "Coach brain: " + d.model + " [" + d.run + "]" : "Coach brain: NOT loaded, rules only. " + (d.why || "");
     llmDone();
   }
