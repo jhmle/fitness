@@ -1,4 +1,4 @@
-import { PROFILE, VAD_URL, ORT_URL, LLM_ID } from "./config.js";
+import { PROFILE, VAD_URL, ORT_URL, LLM_ID, KOKORO_STRICT } from "./config.js";
 import { loadPose, detect } from "./pose.js";
 import { RepEngine, SKELETON } from "./exercises.js";
 import { Agent, kbDocs } from "./agent.js";
@@ -14,7 +14,10 @@ let llmModel = null, ready = 0, starting = false, S = null, state = "off", vad =
 let lastMeter = 0;
 let micStream = null;                                                       // mic stream we open ourselves and hand to the VAD
 for (const [w, name] of [[moon, "Moonshine"], [kokoro, "Kokoro"], [llmW, "Coach brain"]])   // a worker that dies (often out of memory) used to fail silently
-  if (w) w.onerror = (ev) => { ev.preventDefault?.(); fail(new Error(ev.message || "worker stopped unexpectedly"), name); memCheck(name, ev.message || "", !ev.message); };
+  if (w) w.onerror = (ev) => {
+    ev.preventDefault?.(); fail(new Error(ev.message || "worker stopped unexpectedly"), name); memCheck(name, ev.message || "", !ev.message);
+    if (w === kokoro) kokoroDown(ev.message || "worker stopped unexpectedly");
+  };
 const engine = new RepEngine("squat");
 const PTS = [...new Set(SKELETON.flat())];
 
@@ -65,7 +68,7 @@ function loadScript(src) {
 $("load").onclick = async () => {
   $("load").disabled = true; setStatus("Downloading models…", "loading");
   moon.postMessage({ type: "load" });
-  if (kokoro) kokoro.postMessage({ type: "load" });
+  if (kokoro) { kokoro.postMessage({ type: "load", strict: KOKORO_STRICT }); kBump(); }
   if (llmW) { llmW.postMessage({ type: "load", kb: kbDocs() }); }
   try {
     const info = await loadPose(); $("pp").value = 60; $("diag").textContent = "pose: " + info;
@@ -89,7 +92,7 @@ moon.onmessage = async ({ data: d }) => {
 // ---------------------------------------------------------------- speech out (Kokoro on desktop, browser voice on mobile / as fallback)
 const AC = window.AudioContext || window.webkitAudioContext;
 let actx, analyser, nextT = 0, sources = [], lastSay = "", kT = 0, fbEpoch = -1;
-let kokoroBad = false, kLast = 0, kWarm = 0, kMiss = 0, speakingWith = "kokoro", kWarming = false;
+let kokoroBad = false, kLast = 0, kWarm = 0, kMiss = 0, speakingWith = "kokoro", kWarming = false, kReady = false, kCounted = false, kLoadT = 0, kErr = 0;
 const utts = new Set();                          // keep references: Safari can garbage-collect an utterance before it finishes
 // Persistent, visible messages. (The status pill is overwritten on every state change, so errors used to vanish.)
 function note(id, text) { const el = $(id); el.hidden = !text; (el.querySelector("span") || el).textContent = text || ""; if (text) $("diag").textContent = text; }
@@ -159,9 +162,9 @@ function say(text, { urgent = false } = {}) {
   if (!fast) {
     kokoro.postMessage({ type: "speak", text, voice: $("voice").value, id: e });
     clearTimeout(kT);                              // limit scales with how long Kokoro really takes on this device
-    const limit = Math.max(15000, (kLast || kWarm || 2500) * 6);
+    const limit = Math.max(6000, (kLast || kWarm || 2000) * 4);   // slow reply: browser voice takes over
     kT = setTimeout(() => {
-      if (e === epoch && busyTTS && !sources.length) {
+      if (!KOKORO_STRICT && e === epoch && busyTTS && !sources.length) {
         fbEpoch = e;
         if (++kMiss >= 2) { kokoroBad = true; syncVoiceUI(); note("audioNote", "Kokoro is too slow on this device, so I switched to the browser voice for this session."); memCheck("Kokoro", "", true); }
         else note("audioNote", `Kokoro took longer than ${Math.round(limit / 1000)}s, using the browser voice for this reply.`);
@@ -170,34 +173,47 @@ function say(text, { urgent = false } = {}) {
     }, limit);
   } else browserSpeak(text, e);
 }
-function useBrowserVoice() { return !kokoro || $("fastVoice").checked || kokoroBad || kWarming; }
+function useBrowserVoice() { return !kokoro || $("fastVoice").checked || kokoroBad || (!KOKORO_STRICT && kWarming); }
 function syncVoiceUI() {
   const fast = useBrowserVoice();
   $("voice").disabled = fast;
-  $("voiceEngine").textContent = "Speaking with: " + (kWarming && !$("fastVoice").checked && !kokoroBad ? "browser voice while Kokoro warms up…" : fast ? "browser voice (fast)" : "Kokoro" + (kLast ? ` (about ${(kLast / 1000).toFixed(1)}s to generate a reply)` : ""));
+  $("voiceEngine").textContent = "Speaking with: " + (kWarming && !$("fastVoice").checked && !kokoroBad ? "browser voice while Kokoro warms up…" : fast ? "browser voice (fast)" : "Kokoro" + (kLast ? ` (about ${(kLast / 1000).toFixed(1)}s to generate a reply)` : KOKORO_STRICT && !kWarm ? " (first sentence still warming up, early replies may be delayed)" : ""));
+}
+// Safety net: if Kokoro can't load (error, crashed worker, or no progress for 3 minutes) or dies later, switch to the browser voice and let the app carry on.
+function kBump() { clearTimeout(kLoadT); if (!kReady && !kCounted) kLoadT = setTimeout(() => kokoroDown("no progress for 30 seconds while loading"), 30000); }
+function kokoroDown(why, what = kReady ? "stopped working" : "couldn't load") {
+  clearTimeout(kT); clearTimeout(kLoadT);
+  kokoroBad = true; kWarming = false;
+  note("audioNote", `Kokoro ${what} (${why}). Using the browser voice instead.`);
+  memCheck("Kokoro", why, /no progress|stopped unexpectedly/.test(why));
+  if (!kCounted) { kCounted = true; $("pk").value = 100; onReady(); }      // never leave the page stuck on "Downloading models"
+  syncVoiceUI();
 }
 kokoro && (kokoro.onmessage = ({ data: d }) => {
-  if (d.type === "progress") $("pk").value = d.pct;
-  else if (d.type === "log") { console.log(d.message); $("diag").textContent = d.message; }
+  if (d.type === "progress") { $("pk").value = d.pct; kBump(); }
+  else if (d.type === "log") { console.log(d.message); $("diag").textContent = d.message; kBump(); }
   else if (d.type === "ready") {
+    kReady = true; clearTimeout(kLoadT);
     $("voice").innerHTML = d.voices.map((v) => `<option>${v}</option>`).join("");
     $("voice").value = d.voices.includes("af_heart") ? "af_heart" : d.voices[0];
-    kWarming = true;                                      // cues use the browser voice until Kokoro finishes warming up
-    syncVoiceUI(); onReady();
+    if (kokoroBad) { kokoroBad = false; note("audioNote", ""); }          // it loaded after all (slow connection): use it
+    kWarming = !KOKORO_STRICT;                                            // non-Safari: browser voice until the warm-up finishes
+    syncVoiceUI(); if (!kCounted) { kCounted = true; onReady(); }
   }
   else if (d.type === "warm") {
     kWarming = false;
-    if (d.bad) { kokoroBad = true; note("audioNote", "Kokoro isn't responding in this browser (" + d.why + "). Using the browser voice."); memCheck("Kokoro", d.why, true); }
-    else { kWarm = d.ms; $("diag").textContent = `Kokoro ready. First sentence took ${(d.ms / 1000).toFixed(1)}s.`; }
-    syncVoiceUI();
+    if (d.bad) kokoroDown(d.why, "isn't responding in this browser");
+    else { kWarm = d.ms; $("diag").textContent = `Kokoro ready. First sentence took ${(d.ms / 1000).toFixed(1)}s.`; syncVoiceUI(); }
   }
-  else if (d.type === "audio") { clearTimeout(kT); kMiss = 0; kLast = d.ms || kLast; syncVoiceUI(); if (d.id === epoch && d.id !== fbEpoch) play(d.samples, d.rate, d.id); }
+  else if (d.type === "audio") { clearTimeout(kT); kMiss = 0; kErr = 0; kLast = d.ms || kLast; $("diag").textContent = `Kokoro generated a reply in ${((d.ms || 0) / 1000).toFixed(1)}s`; syncVoiceUI(); if (d.id === epoch && d.id !== fbEpoch) play(d.samples, d.rate, d.id); }
   else if (d.type === "error") {
-    clearTimeout(kT);
+    clearTimeout(kT); console.error("Kokoro", d.message);
+    if (!kReady) return kokoroDown(d.message);                            // load failed
     const mine = d.id === epoch && d.id !== fbEpoch;
     note("audioNote", "Kokoro voice failed: " + d.message + (mine ? ". Using the browser voice instead." : ""));
     if (mine) { if (lastSay) browserSpeak(lastSay, d.id); else done(); }
     fail(d, "Kokoro");
+    if (++kErr >= 3) kokoroDown("3 failed replies in a row");
   }
 });
 $("skip").onclick = () => { stopSpeech(); if (S) setState("listening"); };

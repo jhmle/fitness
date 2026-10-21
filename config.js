@@ -15,6 +15,9 @@ const ipadOS = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1
 const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || ipadOS || (navigator.deviceMemory || 8) <= 4;
 
 // Device profiles: desktop gets the fuller pose model + Kokoro; mobile gets lite pose + the browser's built-in voice.
+// Debug only: add ?kokoro=force to the URL to disable the "Kokoro is slow, use the browser voice" fallbacks. Off by default, in every browser.
+export const KOKORO_STRICT = new URLSearchParams(location.search).get("kokoro") === "force";
+
 export const PROFILE = mobile
   ? { name: "mobile", pose: pose("lite"), tts: "browser", llm: false }
   : { name: "desktop", pose: pose("full"), tts: "kokoro", llm: true };

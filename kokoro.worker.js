@@ -20,9 +20,11 @@ async function handle({ data }) {
       // Warm-up in the background: the first generation pays for one-off setup (phonemizer + WASM compile), slow in Safari.
       // The page uses the browser voice until this finishes, so a slow or hanging first run can't block anything.
       log("Kokoro: warming up (first sentence is the slow one)…");
-      try { post({ type: "warm", ms: (await withTimeout(gen("Ready.", voices.includes("af_heart") ? "af_heart" : voices[0]), 90000, "Kokoro warm-up")).ms }); }
+      const run = gen("Ready.", voices.includes("af_heart") ? "af_heart" : voices[0]);
+      try { post({ type: "warm", ms: (await (data.strict ? run : withTimeout(run, 60000, "Kokoro warm-up"))).ms }); }   // strict: wait as long as it takes
       catch (e) { post({ type: "warm", bad: true, why: String(e.message || e) }); }
     } else if (data.type === "speak") {
+      log("Kokoro: generating…");
       const { out, ms } = await gen(data.text, data.voice);
       post({ type: "audio", id: data.id, samples: out.audio, rate: out.sampling_rate, ms }, [out.audio.buffer]);
     }
