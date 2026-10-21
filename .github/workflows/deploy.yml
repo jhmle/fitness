@@ -1,0 +1,76 @@
+name: Deploy
+
+# Runs when the app or the model results change. It publishes the website, and swaps in a
+# new coach model only if that model is at least as good as the current one on some measure.
+on:
+  push:
+    branches: [main]
+    paths: ["*.js", "*.html", "*.css", "training/metrics/**", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # to save the model swap back to the repo
+  pages: write
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # A new model shows up as training/metrics/candidate.json (from the Kaggle training notebook).
+      - name: Is the new model at least as good as the current one?
+        working-directory: training
+        id: model
+        run: |
+          if [ ! -f metrics/candidate.json ]; then
+            echo "No new model this time, only the website is updated." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "result=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          set +e
+          python should_deploy.py --promote > check.txt 2>&1
+          code=$?
+          set -e
+          cat check.txt
+          { echo '### New model check'; echo '```'; cat check.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          rm check.txt
+          case $code in
+            0) echo "result=deployed" >> "$GITHUB_OUTPUT" ;;
+            1) echo "result=held-back" >> "$GITHUB_OUTPUT"
+               echo "::warning::New model was worse on every measure, so it was not deployed." ;;
+            *) exit $code ;;
+          esac
+
+      - name: Save the model swap
+        if: steps.model.outputs.result == 'deployed'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Deploy new coach model"
+          git push
+
+      # Publish only the app itself (not training/, tests/ or the README).
+      - name: Collect the website files
+        run: |
+          mkdir _site
+          cp ./*.js ./*.html ./*.css _site/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
