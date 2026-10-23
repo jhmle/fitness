@@ -5,7 +5,7 @@ name: Deploy
 on:
   push:
     branches: [main]
-    paths: ["*.js", "*.html", "*.css", "training/metrics/**", ".github/workflows/deploy.yml"]
+    paths: ["web/**", "training/metrics/**", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 permissions:
@@ -62,11 +62,11 @@ jobs:
           git commit -m "Deploy new coach model"
           git push
 
-      # Publish only the app itself (not training/, tests/ or the README).
+      # Publish only the app itself (web/), not training/, tests/ or the README.
       - name: Collect the website files
         run: |
           mkdir _site
-          cp ./*.js ./*.html ./*.css _site/
+          cp -r web/. _site/
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
