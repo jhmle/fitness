@@ -16,7 +16,7 @@
 ## Try it
 
 ```bash
-cd fitness
+cd web
 python -m http.server 8000
 ```
 
